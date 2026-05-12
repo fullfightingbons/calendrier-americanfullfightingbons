@@ -2109,7 +2109,13 @@ export default {
           return json({ deleted: Number(resId) });
         }
       }
+// CHECKOUT HELLOASSO
+      if (resource === 'checkout' && method === 'POST') {
+        // ... (le code de la partie 2)
+      }
 
+      return err('Route introuvable', 404);  // ← cette ligne reste en dernier
+      
       return err('Route introuvable', 404);
 
     } catch (e) {
