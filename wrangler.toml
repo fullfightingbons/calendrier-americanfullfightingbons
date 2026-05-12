@@ -12,7 +12,7 @@ routes = [
 [[d1_databases]]
 binding       = "DB"
 database_name = "calendrier-americanfullfightingbonsdb"
-database_id   = "REMPLACER_PAR_VOTRE_D1_ID"   # ← wrangler d1 create calendrier-americanfullfightingbonsdb
+database_id   = "b146bb47-b1cc-48db-9e7c-0c8223a9fee2"   # ← wrangler d1 create calendrier-americanfullfightingbonsdb
 
 # ── Variables d'environnement non-sensibles ──────────────────────────────────────────
 [vars]
