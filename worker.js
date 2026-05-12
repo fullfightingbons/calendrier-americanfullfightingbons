@@ -2,11 +2,6 @@
  * ══════════════════════════════════════════════════════════════
  *  AMERICAN FULL FIGHTING — BONS-EN-CHABLAIS
  *  Cloudflare Worker — sert index.html + API REST D1
- *
- *  GET  /                      → page d'inscription (index.html)
- *  GET  /api/events            → liste événements
- *  POST /api/registrations     → créer une inscription
- *  ... (toutes les routes /api/* identiques)
  * ══════════════════════════════════════════════════════════════
  */
 
@@ -17,19 +12,6 @@ const INDEX_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>American Full Fighting Bons-en-Chablais — Inscription aux Événements</title>
-<!--
-  ╔══════════════════════════════════════════════════════════════════════╗
-  ║              CONFIGURATION — À RENSEIGNER AVANT MISE EN LIGNE       ║
-  ╠══════════════════════════════════════════════════════════════════════╣
-  ║  1. BREVO_API_KEY  : clé API Brevo (v3) de votre compte             ║
-  ║     → https://app.brevo.com/settings/keys/api                       ║
-  ║  2. CLUB_EMAIL     : adresse email du club (expéditeur + destinat.) ║
-  ║  3. ADMIN_PASSWORD : mot de passe admin (changez-le !)              ║
-  ║                                                                      ║
-  ║  ⚠️  NE PARTAGEZ PAS CE FICHIER avec la clé Brevo renseignée.       ║
-  ║  Pour une sécurité maximale, déplacez l'envoi email côté serveur.   ║
-  ╚══════════════════════════════════════════════════════════════════════╝
--->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
@@ -112,12 +94,6 @@ pointer-events:none;
 .badge-stage-ext{background:#EAFAF1;color:#1E8449}
 .badge-grade{background:#F5EEF8;color:#6C3483}
 .badge-sold-out{background:#f5f5f5;color:#999}
-.badge-helloasso{background:#fff3e0;color:#e65100;font-size:10px}
-.ha-iframe-wrap{margin-top:1rem;border:2px solid #FF5F00;border-radius:var(--radius);overflow:hidden}
-.ha-iframe-header{background:#FF5F00;color:white;padding:9px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
-.ha-iframe-header svg{width:18px;height:18px;fill:white;flex-shrink:0}
-.ha-iframe-wrap iframe{width:100%;border:none;display:block;min-height:420px}
-@keyframes ha-spin{to{transform:rotate(360deg)}}
 .card-spots{font-size:12px;color:var(--muted)}
 .card-spots.low{color:#E67E22;font-weight:500}
 .card-spots.full{color:#999}
@@ -174,21 +150,7 @@ textarea{resize:vertical;min-height:80px}
 .summary-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:5px 0;border-bottom:1px solid #ececec}
 .summary-row:last-child{border:none;margin-top:6px;padding-top:10px;font-weight:600;font-size:15px}
 .summary-row .label{color:var(--muted)}
-.helloasso-box{margin-top:1.25rem;border:2px solid #FF5F00;border-radius:var(--radius);overflow:hidden}
-.helloasso-header{background:#FF5F00;color:white;padding:10px 16px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600}
-.helloasso-header svg{width:20px;height:20px;fill:white;flex-shrink:0}
-.helloasso-body{padding:14px 16px;font-size:13px;color:var(--mid);line-height:1.6}
-.helloasso-btn{display:block;margin-top:12px;background:#FF5F00;color:white;text-align:center;padding:10px 16px;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;transition:background .15s}
-.helloasso-btn:hover{background:#e65500}
-.virement-box{margin-top:1.25rem;background:#f8f8f8;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:13px}
-.virement-box .iban-row{font-family:monospace;font-size:13px;background:white;border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-top:6px;letter-spacing:.05em;color:var(--dark)}
 .payment-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1.25rem}
-.pay-option{border:2px solid var(--border);border-radius:var(--radius);padding:12px 14px;cursor:pointer;transition:all .15s;text-align:center}
-.pay-option:hover{border-color:#bbb}
-.pay-option.selected{border-color:var(--red);background:var(--red-bg)}
-.pay-option .pay-icon{font-size:22px;margin-bottom:4px}
-.pay-option .pay-label{font-size:13px;font-weight:500;color:var(--dark)}
-.pay-option .pay-sub{font-size:11px;color:var(--muted)}
 .success-screen{text-align:center;padding:2rem 1rem}
 .success-icon{width:64px;height:64px;background:var(--red-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem}
 .success-icon svg{width:30px;height:30px;stroke:var(--red);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
@@ -205,7 +167,6 @@ textarea{resize:vertical;min-height:80px}
 .btn-next{background:var(--red);color:white}
 .btn-next:hover{background:var(--red-dark)}
 .btn-next:disabled{background:#ccc;cursor:not-allowed}
-.error-msg{font-size:12px;color:var(--red);margin-top:4px;display:none}
 .info-alert{background:#EBF5FB;border-left:3px solid #2980B9;padding:10px 14px;border-radius:4px;font-size:13px;color:#1A5276;margin-bottom:1.25rem;line-height:1.5}
 
 /* FOOTER */
@@ -222,7 +183,7 @@ footer span{color:#888}
 .admin-login-title{font-family:var(--font-display);font-size:22px;color:white;letter-spacing:1px}
 .admin-login-sub{font-size:13px;color:#777;margin-top:4px}
 .admin-login-body{padding:1.75rem 2rem}
-.admin-login-error{background:#FDEDEC;border:1px solid var(--red-light);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--red-dark);margin-bottom:1rem;display:none}
+.admin-login-error{background:#FDEDEC;border:1px solid #F1948A;border-radius:6px;padding:10px 14px;font-size:13px;color:#922B21;margin-bottom:1rem;display:none}
 .admin-panel{background:#f4f4f4;min-height:100vh;position:fixed;inset:0;z-index:2000;display:none;flex-direction:column;overflow:hidden}
 .admin-panel.open{display:flex}
 .admin-topbar{background:var(--dark);color:white;padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px;flex-shrink:0}
@@ -253,7 +214,7 @@ footer span{color:#888}
 .admin-btn-edit,.admin-btn-del{font-family:var(--font-body);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s;border:none}
 .admin-btn-edit{background:#EBF5FB;color:#1A5276;border:1px solid #AED6F1}
 .admin-btn-edit:hover{background:#2980B9;color:white;border-color:#2980B9}
-.admin-btn-del{background:#FDEDEC;color:var(--red-dark);border:1px solid var(--red-light)}
+.admin-btn-del{background:#FDEDEC;color:#922B21;border:1px solid #F1948A}
 .admin-btn-del:hover{background:var(--red);color:white;border-color:var(--red)}
 .admin-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(3px)}
 .admin-modal-overlay.open{display:flex}
@@ -267,12 +228,12 @@ footer span{color:#888}
 .admin-form-section:first-child{margin-top:0}
 .admin-toggle-group{display:flex;gap:8px;flex-wrap:wrap}
 .admin-toggle-btn{font-family:var(--font-body);font-size:13px;font-weight:500;padding:7px 16px;border-radius:20px;border:2px solid var(--border);background:white;color:var(--muted);cursor:pointer;transition:all .15s}
-.admin-toggle-btn.active{border-color:var(--red);background:var(--red-bg);color:var(--red-dark);font-weight:600}
+.admin-toggle-btn.active{border-color:var(--red);background:#FEF5F5;color:#8B0000;font-weight:600}
 .admin-modal-footer{padding:1.25rem 1.75rem;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:10px}
 .btn-save{font-family:var(--font-body);font-size:14px;font-weight:600;padding:10px 24px;border-radius:7px;border:none;background:var(--red);color:white;cursor:pointer;transition:background .15s}
 .btn-save:hover{background:var(--red-dark)}
 .btn-cancel{font-family:var(--font-body);font-size:14px;font-weight:500;padding:10px 20px;border-radius:7px;border:1px solid var(--border);background:white;color:var(--mid);cursor:pointer;transition:background .15s}
-.btn-cancel:hover{background:var(--bg)}
+.btn-cancel:hover{background:#f8f8f8}
 .confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:4000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(3px)}
 .confirm-overlay.open{display:flex}
 .confirm-box{background:white;border-radius:var(--radius-lg);max-width:400px;width:100%;padding:2rem;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.2)}
@@ -322,11 +283,6 @@ footer span{color:#888}
   <div class="hero-inner">
     <h1>ÉVÉNEMENTS<br><span>& STAGES</span></h1>
     <p>Inscrivez-vous aux événements du club — stages, compétitions et séminaires.</p>
-    <div class="hero-tags">
-      <div class="hero-tag active">Inscription 100% en ligne</div>
-      <div class="hero-tag active">Paiement sécurisé</div>
-      <div class="hero-tag active">Confirmation instantanée</div>
-    </div>
   </div>
 </div>
 
@@ -344,213 +300,7 @@ footer span{color:#888}
 <div class="events-section">
   <div class="section-label">Prochains événements</div>
   <div class="events-grid" id="events-grid">
-
-    <!-- Event 1 -->
-    <div class="event-card featured" data-type="stage" onclick="openModal('stage1')">
-      <div class="card-badge-row">
-        <span class="badge badge-stage">Stage</span>
-        <span class="card-spots low">⚡ 4 places restantes</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Stage Été — Frappe & Déplacement</div>
-        <div class="card-subtitle">Tous niveaux · 2 jours intensifs</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            14–15 juin 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Dojo du club, Bons-en-Chablais
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            9h00 – 18h00
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><sup>€</sup>65</div>
-        <button class="btn-inscr primary" onclick="event.stopPropagation();openModal('stage1')">S'inscrire →</button>
-      </div>
-    </div>
-
-    <!-- Event 2 -->
-    <div class="event-card" data-type="competition" onclick="openModal('compet1')">
-      <div class="card-badge-row">
-        <span class="badge badge-compet">Compétition</span>
-        <span class="card-spots">18 places</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Tournoi Interne Printemps</div>
-        <div class="card-subtitle">Adhérents licenciés · Toutes catégories</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            28 juin 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Gymnase intercommunal
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            10h00 – 17h00
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><span class="free">Gratuit</span></div>
-        <button class="btn-inscr outline" onclick="event.stopPropagation();openModal('compet1')">S'inscrire →</button>
-      </div>
-    </div>
-
-    <!-- Event 3 -->
-    <div class="event-card" data-type="stage" onclick="openModal('stage2')">
-      <div class="card-badge-row">
-        <span class="badge badge-stage-ext">Stage extérieur</span>
-        <span class="card-spots">12 places</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Stage Régional FFK</div>
-        <div class="card-subtitle">Ceintures oranges et plus · 1 jour</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            12 juillet 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Annecy (lieu précisé par mail)
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            9h00 – 17h00
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><sup>€</sup>40</div>
-        <button class="btn-inscr primary" onclick="event.stopPropagation();openModal('stage2')">S'inscrire →</button>
-      </div>
-    </div>
-
-    <!-- Event 4 -->
-    <div class="event-card" data-type="seminaire" onclick="openModal('seminar1')">
-      <div class="card-badge-row">
-        <span class="badge badge-stage">Séminaire</span>
-        <span class="card-spots low">⚡ 6 places restantes</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Séminaire Mental & Performance</div>
-        <div class="card-subtitle">Tous adhérents · Après-midi</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            5 septembre 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Dojo du club
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            14h00 – 18h00
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><sup>€</sup>20</div>
-        <button class="btn-inscr primary" onclick="event.stopPropagation();openModal('seminar1')">S'inscrire →</button>
-      </div>
-    </div>
-
-    <!-- Event 5 - Sold out -->
-    <div class="event-card" data-type="competition" style="opacity:.6;pointer-events:none;">
-      <div class="card-badge-row">
-        <span class="badge badge-sold-out">Complet</span>
-        <span class="card-spots full">0 place disponible</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Championnat Régional</div>
-        <div class="card-subtitle">Sélection club · Compétiteurs</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            22 mars 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Lyon
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><sup>€</sup>25</div>
-        <button class="btn-inscr disabled">Complet</button>
-      </div>
-    </div>
-
-    <!-- Event 6 -->
-    <div class="event-card" data-type="gratuit competition" onclick="openModal('compet2')">
-      <div class="card-badge-row">
-        <span class="badge badge-compet">Compétition</span>
-        <span class="card-spots">30 places</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Interclub Amical Été</div>
-        <div class="card-subtitle">Tous niveaux · Ambiance détendue</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            19 juillet 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Thonon-les-Bains
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            10h00 – 16h00
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><span class="free">Gratuit</span></div>
-        <button class="btn-inscr outline" onclick="event.stopPropagation();openModal('compet2')">S'inscrire →</button>
-      </div>
-    </div>
-
-    <!-- Event 7 — Passage de grade -->
-    <div class="event-card" data-type="grade" onclick="openModal('grade1')">
-      <div class="card-badge-row">
-        <span class="badge badge-grade">Passage de grade</span>
-        <span class="card-spots low">⚡ 8 places restantes</span>
-      </div>
-      <div class="card-body">
-        <div class="card-title">Examens de Ceintures — Session Juin</div>
-        <div class="card-subtitle">Blanches → Oranges · Sur convocation</div>
-        <div class="card-meta">
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            21 juin 2025
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-            Dojo du club, Bons-en-Chablais
-          </div>
-          <div class="card-meta-row">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            10h00 – 13h00
-          </div>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="card-price"><sup>€</sup>15</div>
-        <button class="btn-inscr primary" onclick="event.stopPropagation();openModal('grade1')">S'inscrire →</button>
-      </div>
-    </div>
-
+    <div style="grid-column:1/-1;text-align:center;padding:3rem;color:#999;font-size:14px">Chargement des événements…</div>
   </div>
 </div>
 
@@ -571,7 +321,6 @@ footer span{color:#888}
     </div>
 
     <div class="modal-body">
-
       <!-- STEP 1 -->
       <div class="step active" id="step-1">
         <div class="step-title">Informations personnelles</div>
@@ -694,9 +443,7 @@ footer span{color:#888}
       <div class="step" id="step-3">
         <div class="step-title">Récapitulatif de l'inscription</div>
         <div class="step-desc">Vérifiez les informations avant de procéder au paiement.</div>
-        <div class="summary-box" id="summary-content">
-          <!-- rempli en JS -->
-        </div>
+        <div class="summary-box" id="summary-content"></div>
         <div class="check-group" style="margin-top:1rem">
           <input type="checkbox" id="f-reglement">
           <div class="check-text"><strong>J'accepte le règlement intérieur</strong> du club et reconnais avoir pris connaissance des conditions de participation à cet événement.</div>
@@ -711,18 +458,13 @@ footer span{color:#888}
       <div class="step" id="step-4">
         <div class="step-title">Paiement</div>
         <div class="step-desc">Finalisez votre inscription en procédant au paiement sécurisé.</div>
-
-        <!-- Événement gratuit -->
         <div id="paiement-free-msg" style="display:none">
           <div class="info-alert">Cet événement est <strong>gratuit</strong>. Aucun paiement requis — validez simplement votre inscription.</div>
         </div>
-
-        <!-- Événement payant -->
         <div id="paiement-options" style="display:none">
-          <!-- Récap montant -->
-          <div style="background:var(--red-bg);border:2px solid var(--red-light);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+          <div style="background:#FEF5F5;border:2px solid #F1948A;border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
             <div>
-              <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--red-dark);margin-bottom:2px">Montant à régler</div>
+              <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#922B21;margin-bottom:2px">Montant à régler</div>
               <div style="font-family:var(--font-display);font-size:32px;color:var(--dark)" id="ha-montant-label">—</div>
             </div>
             <div style="text-align:right">
@@ -730,27 +472,13 @@ footer span{color:#888}
               <div style="background:#FF5F00;color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">HelloAsso</div>
             </div>
           </div>
-
-          <!-- Bouton ouverture HelloAsso -->
           <div style="text-align:center;padding:8px 0 16px">
-            <button id="btn-open-helloasso" onclick="openHelloAsso()" style="
-              font-family:var(--font-body);font-size:15px;font-weight:700;
-              padding:14px 32px;border-radius:10px;border:none;cursor:pointer;
-              background:#FF5F00;color:white;width:100%;max-width:360px;
-              display:inline-flex;align-items:center;justify-content:center;gap:10px;
-              transition:background .15s;box-shadow:0 4px 14px rgba(255,95,0,.3)
-            " onmouseover="this.style.background='#e65500'" onmouseout="this.style.background='#FF5F00'">
+            <button id="btn-open-helloasso" onclick="openHelloAsso()" style="font-family:var(--font-body);font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;border:none;cursor:pointer;background:#FF5F00;color:white;width:100%;max-width:360px;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background .15s;box-shadow:0 4px 14px rgba(255,95,0,.3)" onmouseover="this.style.background='#e65500'" onmouseout="this.style.background='#FF5F00'">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               Payer sur HelloAsso
             </button>
-            <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6">
-              Une nouvelle fenêtre s'ouvrira sur la page de paiement HelloAsso.<br>
-              Vos informations (nom, email) seront pré-remplies automatiquement.<br>
-              <strong>Revenez ici après paiement</strong> et cochez la case ci-dessous pour valider.
-            </p>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6">Une nouvelle fenêtre s'ouvrira sur la page de paiement HelloAsso.<br><strong>Revenez ici après paiement</strong> et cochez la case ci-dessous pour valider.</p>
           </div>
-
-          <!-- Confirmation manuelle après paiement -->
           <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;background:#fafafa">
             <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:10px">✅ Paiement effectué sur HelloAsso ?</div>
             <div class="check-group">
@@ -760,7 +488,6 @@ footer span{color:#888}
           </div>
         </div>
       </div>
-
     </div><!-- end modal-body -->
 
     <div class="modal-footer">
@@ -769,8 +496,6 @@ footer span{color:#888}
     </div>
   </div>
 </div>
-
-<!-- SUCCESS SCREEN (within modal) will replace modal-body content -->
 
 <footer>
   <span>American Full Fighting Bons-en-Chablais · FFK · Saison 2025–2026</span><br>
@@ -795,7 +520,6 @@ footer span{color:#888}
       </div>
       <button class="btn-save" style="width:100%;margin-top:.5rem" onclick="checkAdminLogin()">Accéder au panneau →</button>
       <button class="btn-cancel" style="width:100%;margin-top:8px" onclick="closeAdminLogin()">Annuler</button>
-      <p style="font-size:11px;color:var(--muted);margin-top:1rem;text-align:center;line-height:1.6">Accès réservé aux administrateurs du club.<br>Mot de passe configurable dans le fichier HTML (bloc <code>CONFIG</code>).</p>
     </div>
   </div>
 </div>
@@ -816,12 +540,10 @@ footer span{color:#888}
     <div class="admin-inner">
       <div class="admin-section-title">GESTION DES ÉVÉNEMENTS</div>
       <div class="admin-section-sub">Créez, modifiez ou supprimez les événements affichés sur la page d'inscription.</div>
-      <!-- Statut de configuration -->
       <div id="admin-config-status" style="margin-bottom:1.5rem"></div>
       <div class="admin-toolbar">
         <div style="font-size:13px;color:var(--muted)"><span id="admin-event-count">0</span> événement(s) au total</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button onclick="resetAdminEvents()" style="font-family:var(--font-body);font-size:12px;padding:7px 14px;border-radius:7px;border:1px solid #ddd;background:white;color:#999;cursor:pointer" title="Réinitialiser aux événements par défaut">↺ Réinitialiser</button>
           <button class="btn-add-event" onclick="openEventForm(null)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nouvel événement
@@ -842,7 +564,6 @@ footer span{color:#888}
     </div>
     <div class="admin-modal-body">
       <input type="hidden" id="ae-id">
-
       <div class="admin-form-section">Informations générales</div>
       <div class="form-group">
         <label>Titre de l'événement <span class="req">*</span></label>
@@ -861,7 +582,6 @@ footer span{color:#888}
           <button class="admin-toggle-btn" data-val="grade" onclick="selectToggle('ae-type-group',this)">Passage de grade</button>
         </div>
       </div>
-
       <div class="admin-form-section">Date, lieu & horaires</div>
       <div class="form-row">
         <div class="form-group">
@@ -887,7 +607,6 @@ footer span{color:#888}
         <label>Lieu <span class="req">*</span></label>
         <input type="text" id="ae-lieu" placeholder="Ex : Dojo du club, Bons-en-Chablais">
       </div>
-
       <div class="admin-form-section">Tarif & places</div>
       <div class="form-row">
         <div class="form-group">
@@ -899,7 +618,6 @@ footer span{color:#888}
           <input type="number" id="ae-spots" min="0" step="1" placeholder="20">
         </div>
       </div>
-
       <div class="admin-form-section">Statut & options</div>
       <div class="form-group">
         <label>Statut</label>
@@ -920,7 +638,6 @@ footer span{color:#888}
           <div class="check-text"><strong>Passage de grade</strong> — affiche les champs ceinture dans le formulaire d'inscription.</div>
         </div>
       </div>
-
       <div class="admin-form-section">Paiement HelloAsso (optionnel)</div>
       <div class="form-group">
         <div class="check-group">
@@ -945,7 +662,7 @@ footer span{color:#888}
   <div class="confirm-box">
     <div class="confirm-icon">🗑️</div>
     <div class="confirm-title">SUPPRIMER CET ÉVÉNEMENT ?</div>
-    <div class="confirm-msg" id="confirm-msg">Cette action est irréversible. L'événement sera retiré de la page d'inscription.</div>
+    <div class="confirm-msg" id="confirm-msg">Cette action est irréversible.</div>
     <div class="confirm-btns">
       <button class="btn-cancel" onclick="closeConfirm()">Annuler</button>
       <button class="btn-save" style="background:#C0392B" id="confirm-yes-btn">Supprimer</button>
@@ -954,36 +671,20 @@ footer span{color:#888}
 </div>
 
 <script>
-/* ════════════════════════════════════════════════════
-   CONFIGURATION — À MODIFIER ICI
-   ════════════════════════════════════════════════════ */
 const CONFIG = {
-  // Clé API Brevo — obtenez-la sur https://app.brevo.com/settings/keys/api
-  // Laissez vide ('') pour désactiver les notifications email
   BREVO_API_KEY: '',
-
-  // Email du club (expéditeur et destinataire des notifications)
   CLUB_EMAIL: 'fullfightingbons@gmail.com',
   CLUB_NAME: 'American Full Fighting Bons-en-Chablais',
-
-  // URL de votre Cloudflare Worker
-  // Remplacez par votre domaine personnalisé une fois configuré :
-  // API_URL: 'https://calendrier.americanfullfightingbons.fr'
-  API_URL: window.location.origin  // automatique — même domaine que la page
+  API_URL: window.location.origin
 };
-/* ════════════════════════════════════════════════════ */
 
-/* ── Client API Worker ─────────────────────────────── */
 const API = {
-  // Token admin saisi au moment du login — jamais stocké dans le code
   _token: null,
-
   async get(path) {
     const r = await fetch(CONFIG.API_URL + path);
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
   },
-
   async post(path, body) {
     const r = await fetch(CONFIG.API_URL + path, {
       method: 'POST',
@@ -993,7 +694,6 @@ const API = {
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
   },
-
   async adminPost(path, body) {
     const r = await fetch(CONFIG.API_URL + path, {
       method: 'POST',
@@ -1003,7 +703,6 @@ const API = {
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
   },
-
   async adminPut(path, body) {
     const r = await fetch(CONFIG.API_URL + path, {
       method: 'PUT',
@@ -1013,7 +712,6 @@ const API = {
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
   },
-
   async adminDelete(path) {
     const r = await fetch(CONFIG.API_URL + path, {
       method: 'DELETE',
@@ -1024,34 +722,21 @@ const API = {
   }
 };
 
-const events={
-  stage1:{title:'Stage Été — Frappe & Déplacement',sub:'Stage · 14–15 juin 2025 · Dojo du club',price:65,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/stage-ete-2025'},
-  compet1:{title:'Tournoi Interne Printemps',sub:'Compétition · 28 juin 2025 · Gymnase intercommunal',price:0,helloasso:false},
-  stage2:{title:'Stage Régional FFK',sub:'Stage · 12 juillet 2025 · Annecy',price:40,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/stage-ffk-2025'},
-  seminar1:{title:'Séminaire Mental & Performance',sub:'Séminaire · 5 septembre 2025 · Dojo du club',price:20,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/seminaire-mental'},
-  compet2:{title:'Interclub Amical Été',sub:'Compétition · 19 juillet 2025 · Thonon-les-Bains',price:0,helloasso:false},
-  grade1:{title:'Examens de Ceintures — Session Juin',sub:'Passage de grade · 21 juin 2025 · Dojo du club',price:15,helloasso:true,isGrade:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/passage-grade-juin-2025'}
-};
+let events = {};
+let currentEvent = null, currentStep = 1;
 
-let currentEvent=null,currentStep=1;
-
-function filterCards(type,btn){
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+function filterCards(type, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.querySelectorAll('.event-card').forEach(card=>{
-    if(type==='tous'){
-      card.style.display='';
-    } else if(type==='gratuit'){
-      const price=card.querySelector('.free');
-      card.style.display=price?'':'none';
-    } else {
-      card.style.display=card.dataset.type&&card.dataset.type.includes(type)?'':'none';
-    }
+  document.querySelectorAll('.event-card').forEach(card => {
+    if (type === 'tous') { card.style.display = ''; }
+    else if (type === 'gratuit') { card.style.display = card.querySelector('.free') ? '' : 'none'; }
+    else { card.style.display = card.dataset.type && card.dataset.type.includes(type) ? '' : 'none'; }
   });
 }
 
-function openModal(eventId){
-  currentEvent = { ...events[eventId], id: eventId }; // ✅ id injecté
+function openModal(eventId) {
+  currentEvent = { ...events[eventId], id: eventId };
   currentStep = 1;
   document.getElementById('modal-title').textContent = currentEvent.title;
   document.getElementById('modal-sub').textContent = currentEvent.sub;
@@ -1060,71 +745,58 @@ function openModal(eventId){
   document.body.style.overflow = 'hidden';
 }
 
-function closeModal(){
+function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
-  document.body.style.overflow='';
+  document.body.style.overflow = '';
 }
 
-function maybeClose(e){
-  if(e.target===document.getElementById('modal-overlay')) closeModal();
+function maybeClose(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
 }
 
-function updateStepUI(){
-  for(let i=1;i<=4;i++){
-    const s=document.getElementById('step-'+i);
-    const ps=document.getElementById('ps'+i);
-    if(s){s.classList.toggle('active',i===currentStep);}
-    if(ps){ps.classList.toggle('active',i===currentStep);}
+function updateStepUI() {
+  for (let i = 1; i <= 4; i++) {
+    const s = document.getElementById('step-' + i);
+    const ps = document.getElementById('ps' + i);
+    if (s) s.classList.toggle('active', i === currentStep);
+    if (ps) ps.classList.toggle('active', i === currentStep);
   }
-  document.getElementById('progress-fill').style.width=(currentStep/4*100)+'%';
-  document.getElementById('btn-back').style.visibility=currentStep>1?'visible':'hidden';
-  const btnNext=document.getElementById('btn-next');
-  if(currentStep===4){
-    btnNext.textContent=currentEvent.price===0?'Confirmer l\\'inscription ✓':'Confirmer →';
-  } else {
-    btnNext.textContent='Continuer →';
-  }
-  // show mineur section
-  document.getElementById('mineur-section').style.display=document.getElementById('f-mineur').checked?'block':'none';
-  // show grade section only for grade events
-  const gradeSection=document.getElementById('grade-section');
-  if(gradeSection) gradeSection.style.display=(currentEvent&&currentEvent.isGrade)?'block':'none';
-  // step 3 summary
-  if(currentStep===3) buildSummary();
-  // step 4 payment
-  if(currentStep===4) setupPaymentStep();
+  document.getElementById('progress-fill').style.width = (currentStep / 4 * 100) + '%';
+  document.getElementById('btn-back').style.visibility = currentStep > 1 ? 'visible' : 'hidden';
+  const btnNext = document.getElementById('btn-next');
+  btnNext.textContent = currentStep === 4 ? "Confirmer l'inscription ✓" : 'Continuer →';
+  document.getElementById('mineur-section').style.display = document.getElementById('f-mineur').checked ? 'block' : 'none';
+  const gradeSection = document.getElementById('grade-section');
+  if (gradeSection) gradeSection.style.display = (currentEvent && currentEvent.isGrade) ? 'block' : 'none';
+  if (currentStep === 3) buildSummary();
+  if (currentStep === 4) setupPaymentStep();
 }
 
-function buildSummary(){
-  const nom=(document.getElementById('f-nom').value||'—').toUpperCase();
-  const prenom=document.getElementById('f-prenom').value||'—';
-  const dob=document.getElementById('f-dob').value||'—';
-  const email=document.getElementById('f-email').value||'—';
-  const cat=document.getElementById('f-categorie').value||'Non renseigné';
-  const prix=currentEvent.price===0?'Gratuit':'€'+currentEvent.price;
-  document.getElementById('summary-content').innerHTML=\`
-    <div class="summary-row"><span class="label">Événement</span><span>\${currentEvent.title}</span></div>
-    <div class="summary-row"><span class="label">Participant</span><span>\${nom} \${prenom}</span></div>
-    <div class="summary-row"><span class="label">Date de naissance</span><span>\${dob}</span></div>
-    <div class="summary-row"><span class="label">Email de confirmation</span><span>\${email}</span></div>
-    <div class="summary-row"><span class="label">Catégorie</span><span>\${cat}</span></div>
-    <div class="summary-row"><span class="label">Montant total</span><span style="font-weight:600;color:var(--red)">\${prix}</span></div>
-  \`;
+function buildSummary() {
+  const nom = (document.getElementById('f-nom').value || '—').toUpperCase();
+  const prenom = document.getElementById('f-prenom').value || '—';
+  const dob = document.getElementById('f-dob').value || '—';
+  const email = document.getElementById('f-email').value || '—';
+  const cat = document.getElementById('f-categorie').value || 'Non renseigné';
+  const prix = currentEvent.price === 0 ? 'Gratuit' : '€' + currentEvent.price;
+  document.getElementById('summary-content').innerHTML =
+    '<div class="summary-row"><span class="label">Événement</span><span>' + currentEvent.title + '</span></div>' +
+    '<div class="summary-row"><span class="label">Participant</span><span>' + nom + ' ' + prenom + '</span></div>' +
+    '<div class="summary-row"><span class="label">Date de naissance</span><span>' + dob + '</span></div>' +
+    '<div class="summary-row"><span class="label">Email</span><span>' + email + '</span></div>' +
+    '<div class="summary-row"><span class="label">Catégorie</span><span>' + cat + '</span></div>' +
+    '<div class="summary-row"><span class="label">Montant total</span><span style="font-weight:600;color:var(--red)">' + prix + '</span></div>';
 }
 
-/* ---- HelloAsso — ouverture dans un nouvel onglet ---- */
-function setupPaymentStep(){
-  const isFree=currentEvent.price===0;
-  document.getElementById('paiement-free-msg').style.display=isFree?'block':'none';
-  document.getElementById('paiement-options').style.display=isFree?'none':'block';
-  if(!isFree){
-    document.getElementById('ha-montant-label').textContent='€'+currentEvent.price;
-    // Reset case à cocher
-    const cb=document.getElementById('f-paiement-ok');
-    if(cb) cb.checked=false;
+function setupPaymentStep() {
+  const isFree = currentEvent.price === 0;
+  document.getElementById('paiement-free-msg').style.display = isFree ? 'block' : 'none';
+  document.getElementById('paiement-options').style.display = isFree ? 'none' : 'block';
+  if (!isFree) {
+    document.getElementById('ha-montant-label').textContent = '€' + currentEvent.price;
+    const cb = document.getElementById('f-paiement-ok');
+    if (cb) cb.checked = false;
   }
-  const btnNext=document.getElementById('btn-next');
-  btnNext.textContent=isFree?'Confirmer l\\'inscription ✓':'Confirmer l\\'inscription ✓';
 }
 
 async function openHelloAsso() {
@@ -1139,60 +811,48 @@ async function openHelloAsso() {
       email:    document.getElementById('f-email').value,
     });
     window.location.href = result.redirectUrl;
-  } catch(e) {
+  } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Payer sur HelloAsso';
     alert('Erreur lors de la création du paiement : ' + e.message);
   }
 }
 
-function validateStep(){
-  if(currentStep===1){
-    const nom=document.getElementById('f-nom').value.trim();
-    const prenom=document.getElementById('f-prenom').value.trim();
-    const dob=document.getElementById('f-dob').value;
-    const tel=document.getElementById('f-tel').value.trim();
-    const email=document.getElementById('f-email').value.trim();
-    if(!nom||!prenom||!dob||!tel||!email){alert('Merci de remplir tous les champs obligatoires (marqués d\\'un *).');return false;}
-    if(!email.includes('@')){alert('Adresse email invalide.');return false;}
+function validateStep() {
+  if (currentStep === 1) {
+    const nom = document.getElementById('f-nom').value.trim();
+    const prenom = document.getElementById('f-prenom').value.trim();
+    const dob = document.getElementById('f-dob').value;
+    const tel = document.getElementById('f-tel').value.trim();
+    const email = document.getElementById('f-email').value.trim();
+    if (!nom || !prenom || !dob || !tel || !email) { alert("Merci de remplir tous les champs obligatoires (marqués d'un *)."); return false; }
+    if (!email.includes('@')) { alert('Adresse email invalide.'); return false; }
   }
-  if(currentStep===2){
-    if(!document.getElementById('f-certif').checked){alert('Vous devez certifier disposer d\\'un certificat médical pour continuer.');return false;}
+  if (currentStep === 2) {
+    if (!document.getElementById('f-certif').checked) { alert("Vous devez certifier disposer d'un certificat médical pour continuer."); return false; }
   }
-  if(currentStep===3){
-    if(!document.getElementById('f-reglement').checked){alert('Vous devez accepter le règlement intérieur pour continuer.');return false;}
+  if (currentStep === 3) {
+    if (!document.getElementById('f-reglement').checked) { alert('Vous devez accepter le règlement intérieur pour continuer.'); return false; }
   }
-  if(currentStep===4 && currentEvent.price!==0){
-    if(!document.getElementById('f-paiement-ok').checked){
-      alert('Merci de cocher la case confirmant que vous avez effectué le paiement sur HelloAsso.');
-      return false;
-    }
+  if (currentStep === 4 && currentEvent.price !== 0) {
+    if (!document.getElementById('f-paiement-ok').checked) { alert('Merci de cocher la case confirmant que vous avez effectué le paiement sur HelloAsso.'); return false; }
   }
   return true;
 }
 
-function nextStep(){
-  if(!validateStep()) return;
-  if(currentStep===4){
-    showSuccess(); return;
-  }
+function nextStep() {
+  if (!validateStep()) return;
+  if (currentStep === 4) { showSuccess(); return; }
   currentStep++;
   updateStepUI();
-  document.querySelector('.modal-body').scrollTop=0;
+  document.querySelector('.modal-body').scrollTop = 0;
 }
 
-function prevStep(){
-  if(currentStep>1){currentStep--;updateStepUI();}
+function prevStep() {
+  if (currentStep > 1) { currentStep--; updateStepUI(); }
 }
 
-function goToHelloAsso(){
-  const url=currentEvent.helloasso_url||'https://www.helloasso.com';
-  window.open(url,'_blank');
-  showSuccess();
-}
-
-function showSuccess(){
-  // ✅ 1. Lire TOUTES les valeurs avant de toucher au DOM
+function showSuccess() {
   const nom        = (document.getElementById('f-nom').value || '').trim().toUpperCase();
   const prenom     = document.getElementById('f-prenom').value.trim() || '';
   const email      = document.getElementById('f-email').value.trim() || '';
@@ -1206,14 +866,9 @@ function showSuccess(){
   const prix       = currentEvent.price === 0 ? 'Gratuit' : '€' + currentEvent.price;
   const now        = new Date().toLocaleString('fr-FR');
 
-  // ✅ 2. Construire le payload AVANT d'écraser le DOM
   const payload = {
-    event_id:          currentEvent.id,
-    nom:               nom,
-    prenom:            prenom,
-    date_naissance:    dob,
-    telephone:         tel,
-    email:             email,
+    event_id: currentEvent.id,
+    nom, prenom, date_naissance: dob, telephone: tel, email,
     licence_ffk:       licence !== '-' ? licence : null,
     is_mineur:         isMineur,
     categorie:         cat || null,
@@ -1221,6 +876,7 @@ function showSuccess(){
     regime:            document.getElementById('f-regime').value || null,
     ceinture_actuelle: currentEvent.isGrade ? (document.getElementById('f-ceinture-actuelle').value || null) : null,
     ceinture_visee:    currentEvent.isGrade ? (document.getElementById('f-ceinture-visee').value || null) : null,
+    parent_nom:        isMineur ? (document.getElementById('f-parent-nom').value || null) : null,
     parent_prenom:     isMineur ? (document.getElementById('f-parent-prenom').value || null) : null,
     parent_tel:        isMineur ? (document.getElementById('f-parent-tel').value || null) : null,
     message:           message !== '-' ? message : null,
@@ -1229,897 +885,312 @@ function showSuccess(){
     reglement_ok:      document.getElementById('f-reglement').checked
   };
 
-  const emailSent = CONFIG.BREVO_API_KEY && email;
-  const emailMsg = emailSent
-    ? 'Un email de confirmation a ete envoye a <strong>' + email + '</strong>.'
-    : 'Notez bien votre inscription. Aucun email de confirmation n est configure.';
-    
-  // ✅ 3. Réécrire le DOM APRÈS avoir tout lu
- document.querySelector('.modal-body').innerHTML =
+  const emailMsg = (CONFIG.BREVO_API_KEY && email)
+    ? 'Un email de confirmation a été envoyé à <strong>' + email + '</strong>.'
+    : 'Notez bien votre inscription. Aucun email de confirmation n\'est configuré.';
+
+  document.querySelector('.modal-body').innerHTML =
     '<div class="success-screen">' +
       '<div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' +
-      '<div class="success-title">INSCRIPTION VALID\u00c9E</div>' +
-      '<p class="success-sub">Votre inscription \u00e0 <strong>' + currentEvent.title + '</strong> a bien \u00e9t\u00e9 enregistr\u00e9e. ' + emailMsg + '</p>' +
+      '<div class="success-title">INSCRIPTION VALIDÉE</div>' +
+      '<p class="success-sub">Votre inscription à <strong>' + currentEvent.title + '</strong> a bien été enregistrée. ' + emailMsg + '</p>' +
       '<div class="recap-card">' +
         '<div class="recap-row"><span class="recap-label">Participant</span><span>' + nom + ' ' + prenom + '</span></div>' +
-        '<div class="recap-row"><span class="recap-label">\u00c9v\u00e9nement</span><span>' + currentEvent.title + '</span></div>' +
+        '<div class="recap-row"><span class="recap-label">Événement</span><span>' + currentEvent.title + '</span></div>' +
         '<div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">' + prix + '</span></div>' +
-        '<div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">\u2713 Confirm\u00e9</span></div>' +
+        '<div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>' +
       '</div>' +
       '<button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>' +
     '</div>';
   document.querySelector('.modal-footer').style.display = 'none';
   document.getElementById('progress-fill').style.width = '100%';
 
-  // ✅ 4. Envoyer en base D1
   API.post('/api/registrations', payload)
-    .then(r => console.log('Inscription enregistrée en base, id:', r.id))
-    .catch(e => console.warn('Erreur enregistrement inscription D1:', e));
+    .then(r => console.log('Inscription enregistrée, id:', r.id))
+    .catch(e => console.warn('Erreur D1:', e));
 
-  // ✅ 5. Notifications Brevo
   const d = { nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now };
-  if(CONFIG.BREVO_API_KEY){
-    sendBrevoNotification(d);         // notification club
-    if(email) sendConfirmationToParticipant(d); // confirmation participant
+  if (CONFIG.BREVO_API_KEY) {
+    sendBrevoNotification(d);
+    if (email) sendConfirmationToParticipant(d);
   }
 }
 
-async function sendBrevoNotification(d){
-  const BREVO_API_KEY=CONFIG.BREVO_API_KEY;
-  if(!BREVO_API_KEY) return;
-  const htmlBody=\`
-    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e0e0e0">
-      <div style="background:#111;padding:24px 32px;display:flex;align-items:center;gap:14px">
-        <div style="background:#C0392B;width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <span style="color:white;font-size:20px">🥊</span>
-        </div>
-        <div>
-          <div style="font-family:'Bebas Neue',Impact,sans-serif;font-size:22px;color:white;letter-spacing:1px">NOUVELLE INSCRIPTION</div>
-          <div style="font-size:12px;color:#888;margin-top:2px">\${CONFIG.CLUB_NAME}</div>
-        </div>
-      </div>
-      <div style="padding:28px 32px">
-        <div style="background:#FDEDEC;border-left:4px solid #C0392B;padding:14px 18px;border-radius:6px;margin-bottom:24px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#922B21;margin-bottom:4px">Événement</div>
-          <div style="font-size:18px;font-weight:700;color:#111">\${currentEvent.title}</div>
-          <div style="font-size:13px;color:#555;margin-top:2px">\${currentEvent.sub}</div>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777;width:40%">Participant</td><td style="padding:10px 0;font-weight:600;color:#111">\${d.nom} \${d.prenom}</td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">Email</td><td style="padding:10px 0;color:#111"><a href="mailto:\${d.email}" style="color:#C0392B">\${d.email}</a></td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">Téléphone</td><td style="padding:10px 0;color:#111">\${d.tel}</td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">Date de naissance</td><td style="padding:10px 0;color:#111">\${d.dob}</td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">Catégorie</td><td style="padding:10px 0;color:#111">\${d.cat}</td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">Niveau</td><td style="padding:10px 0;color:#111">\${d.niveau}</td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">N° licence FFK</td><td style="padding:10px 0;color:#111">\${d.licence}</td></tr>
-          <tr style="border-bottom:1px solid #f0f0f0"><td style="padding:10px 0;color:#777">Remarque</td><td style="padding:10px 0;color:#111">\${d.message}</td></tr>
-          <tr><td style="padding:12px 0;color:#777;font-weight:700">Montant</td><td style="padding:12px 0;font-size:18px;font-weight:800;color:#C0392B">\${d.prix}</td></tr>
-        </table>
-        <div style="margin-top:20px;padding:12px 16px;background:#f8f8f8;border-radius:6px;font-size:12px;color:#999">Inscription enregistrée le \${d.now}</div>
-      </div>
-      <div style="background:#111;padding:16px 32px;font-size:11px;color:#555;text-align:center">\${CONFIG.CLUB_NAME} · FFK · Saison 2025–2026</div>
-    </div>\`;
-
+async function sendBrevoNotification(d) {
+  if (!CONFIG.BREVO_API_KEY) return;
   try {
-    const resp=await fetch('https://api.brevo.com/v3/smtp/email',{
-      method:'POST',
-      headers:{'accept':'application/json','api-key':BREVO_API_KEY,'content-type':'application/json'},
-      body:JSON.stringify({
-        sender:{name:CONFIG.CLUB_NAME,email:CONFIG.CLUB_EMAIL},
-        to:[{email:CONFIG.CLUB_EMAIL,name:CONFIG.CLUB_NAME}],
-        replyTo:{email:d.email,name:\`\${d.prenom} \${d.nom}\`},
-        subject:\`🥊 Nouvelle inscription — \${currentEvent.title} — \${d.nom} \${d.prenom}\`,
-        htmlContent:htmlBody
+    await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'accept': 'application/json', 'api-key': CONFIG.BREVO_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: CONFIG.CLUB_NAME, email: CONFIG.CLUB_EMAIL },
+        to: [{ email: CONFIG.CLUB_EMAIL, name: CONFIG.CLUB_NAME }],
+        replyTo: { email: d.email, name: d.prenom + ' ' + d.nom },
+        subject: '🥊 Nouvelle inscription — ' + currentEvent.title + ' — ' + d.nom + ' ' + d.prenom,
+        htmlContent: '<p>Nouvelle inscription de ' + d.nom + ' ' + d.prenom + ' pour ' + currentEvent.title + '</p>'
       })
     });
-    if(!resp.ok){const err=await resp.json();console.warn('Brevo club error:',err);}
-  } catch(e){console.warn('Erreur envoi email club Brevo:',e);}
+  } catch (e) { console.warn('Erreur Brevo club:', e); }
 }
 
-async function sendConfirmationToParticipant(d){
-  const BREVO_API_KEY=CONFIG.BREVO_API_KEY;
-  if(!BREVO_API_KEY||!d.email) return;
-  const htmlBody=\`
-    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e0e0e0">
-      <div style="background:#111;padding:24px 32px">
-        <div style="font-family:'Bebas Neue',Impact,sans-serif;font-size:26px;color:white;letter-spacing:2px">VOTRE INSCRIPTION EST CONFIRMÉE</div>
-        <div style="font-size:13px;color:#888;margin-top:4px">\${CONFIG.CLUB_NAME}</div>
-      </div>
-      <div style="padding:28px 32px">
-        <p style="font-size:15px;color:#333;margin-bottom:24px">Bonjour <strong>\${d.prenom} \${d.nom}</strong>,<br><br>
-        Nous avons bien reçu votre inscription à l'événement suivant :</p>
-        <div style="background:#FDEDEC;border-left:4px solid #C0392B;padding:14px 18px;border-radius:6px;margin-bottom:24px">
-          <div style="font-size:18px;font-weight:700;color:#111">\${currentEvent.title}</div>
-          <div style="font-size:13px;color:#555;margin-top:4px">\${currentEvent.sub}</div>
-          <div style="font-size:15px;font-weight:700;color:#C0392B;margin-top:8px">\${d.prix}</div>
-        </div>
-        \${currentEvent.price > 0 && currentEvent.helloasso ? \`
-        <div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;padding:14px 18px;margin-bottom:20px">
-          <div style="font-size:13px;font-weight:700;color:#e65100;margin-bottom:6px">💳 Paiement HelloAsso</div>
-          <p style="font-size:13px;color:#555;margin:0">Si vous n'avez pas encore effectué votre paiement, rendez-vous sur HelloAsso pour finaliser votre inscription :<br>
-          <a href="\${currentEvent.helloasso_url}" style="color:#FF5F00;font-weight:600">\${currentEvent.helloasso_url}</a></p>
-        </div>\` : ''}
-        <p style="font-size:13px;color:#777;">En cas de question, contactez-nous à <a href="mailto:\${CONFIG.CLUB_EMAIL}" style="color:#C0392B">\${CONFIG.CLUB_EMAIL}</a>.</p>
-      </div>
-      <div style="background:#111;padding:16px 32px;font-size:11px;color:#555;text-align:center">\${CONFIG.CLUB_NAME} · FFK · Saison 2025–2026</div>
-    </div>\`;
-
+async function sendConfirmationToParticipant(d) {
+  if (!CONFIG.BREVO_API_KEY || !d.email) return;
   try {
-    const resp=await fetch('https://api.brevo.com/v3/smtp/email',{
-      method:'POST',
-      headers:{'accept':'application/json','api-key':BREVO_API_KEY,'content-type':'application/json'},
-      body:JSON.stringify({
-        sender:{name:CONFIG.CLUB_NAME,email:CONFIG.CLUB_EMAIL},
-        to:[{email:d.email,name:\`\${d.prenom} \${d.nom}\`}],
-        subject:\`✅ Inscription confirmée — \${currentEvent.title}\`,
-        htmlContent:htmlBody
+    await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'accept': 'application/json', 'api-key': CONFIG.BREVO_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: CONFIG.CLUB_NAME, email: CONFIG.CLUB_EMAIL },
+        to: [{ email: d.email, name: d.prenom + ' ' + d.nom }],
+        subject: '✅ Inscription confirmée — ' + currentEvent.title,
+        htmlContent: '<p>Bonjour ' + d.prenom + ', votre inscription à ' + currentEvent.title + ' est confirmée. Montant : ' + d.prix + '</p>'
       })
     });
-    if(!resp.ok){const err=await resp.json();console.warn('Brevo participant error:',err);}
-  } catch(e){console.warn('Erreur envoi email participant Brevo:',e);}
+  } catch (e) { console.warn('Erreur Brevo participant:', e); }
 }
 
-document.getElementById('f-mineur').addEventListener('change',function(){
-  document.getElementById('mineur-section').style.display=this.checked?'block':'none';
+document.getElementById('f-mineur').addEventListener('change', function () {
+  document.getElementById('mineur-section').style.display = this.checked ? 'block' : 'none';
 });
 
-/* ============================================================
-   ADMIN — données & état
-   ============================================================ */
-// adminEvents est alimenté depuis l'API D1 au démarrage
+/* ── Admin ── */
 let adminEvents = [];
-let idCounter = 100;
 let pendingDeleteId = null;
+const typeColors = { stage: '#2980B9', competition: '#C0392B', seminaire: '#2980B9', grade: '#6C3483' };
+const typeLabels = { stage: 'Stage', competition: 'Compétition', seminaire: 'Séminaire', grade: 'Passage de grade' };
 
-/* ── Chargement initial des événements depuis le Worker ── */
 async function initPage() {
   try {
     const evts = await API.get('/api/events');
     adminEvents = evts.map(normalizeEvent);
-    // Alimenter l'objet events utilisé par les modals d'inscription
-    adminEvents.forEach(ev => {
-      events[ev.id] = {
-        title: ev.title,
-        sub: buildSubText(ev),
-        price: ev.price,
-        helloasso: !!ev.helloasso,
-        helloasso_url: ev.helloasso_url || '',
-        isGrade: !!ev.is_grade
-      };
-    });
+    adminEvents.forEach(ev => { events[ev.id] = { title: ev.title, sub: buildSubText(ev), price: ev.price, helloasso: !!ev.helloasso, helloasso_url: ev.helloasso_url || '', isGrade: !!ev.isGrade }; });
     rebuildPublicPage();
-  } catch(e) {
+  } catch (e) {
     console.error('Impossible de charger les événements:', e);
+    document.getElementById('events-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;color:#999">Impossible de charger les événements.</div>';
   }
 }
 
-// Normalise les champs D1 (snake_case) vers le format interne (camelCase)
 function normalizeEvent(ev) {
   return {
-    id:           ev.id,
-    title:        ev.title,
-    sub:          ev.sub,
-    type:         ev.type,
-    status:       ev.status,
-    dateStart:    ev.date_start,
-    dateEnd:      ev.date_end   || '',
-    timeStart:    ev.time_start || '',
-    timeEnd:      ev.time_end   || '',
-    lieu:         ev.lieu,
-    price:        ev.price,
-    spots:        ev.spots_left,
-    spotsTotal:   ev.spots_total,
-    featured:     !!ev.featured,
-    isGrade:      !!ev.is_grade,
-    helloasso:    !!ev.helloasso,
-    helloasso_url: ev.helloasso_url || ''
+    id: ev.id, title: ev.title, sub: ev.sub, type: ev.type, status: ev.status,
+    dateStart: ev.date_start, dateEnd: ev.date_end || '', timeStart: ev.time_start || '', timeEnd: ev.time_end || '',
+    lieu: ev.lieu, price: ev.price, spots: ev.spots_left, spotsTotal: ev.spots_total,
+    featured: !!ev.featured, isGrade: !!ev.is_grade, helloasso: !!ev.helloasso, helloasso_url: ev.helloasso_url || ''
   };
 }
 
 document.addEventListener('DOMContentLoaded', initPage);
 
-/* -------- Login -------- */
-function openAdminLogin(){
-  document.getElementById('admin-login-overlay').classList.add('open');
-  setTimeout(()=>document.getElementById('admin-pw').focus(),100);
-}
-function closeAdminLogin(){
-  document.getElementById('admin-login-overlay').classList.remove('open');
-  document.getElementById('admin-pw').value='';
-  document.getElementById('login-error').style.display='none';
-}
-async function checkAdminLogin(){
-  const pw=document.getElementById('admin-pw').value.trim();
-  if(!pw) return;
-  // Vérifie le token contre l'API (tentative de GET protégé)
+function openAdminLogin() { document.getElementById('admin-login-overlay').classList.add('open'); setTimeout(() => document.getElementById('admin-pw').focus(), 100); }
+function closeAdminLogin() { document.getElementById('admin-login-overlay').classList.remove('open'); document.getElementById('admin-pw').value = ''; document.getElementById('login-error').style.display = 'none'; }
+
+async function checkAdminLogin() {
+  const pw = document.getElementById('admin-pw').value.trim();
+  if (!pw) return;
   try {
     API._token = pw;
-    await fetch(CONFIG.API_URL + '/api/registrations', {
-      headers: { 'Authorization': 'Bearer ' + pw }
-    }).then(r => { if (!r.ok) throw new Error('unauthorized'); });
+    const r = await fetch(CONFIG.API_URL + '/api/registrations', { headers: { 'Authorization': 'Bearer ' + pw } });
+    if (!r.ok) throw new Error('unauthorized');
     closeAdminLogin();
     openAdminPanel();
-  } catch(e) {
+  } catch (e) {
     API._token = null;
-    document.getElementById('login-error').style.display='block';
-    document.getElementById('admin-pw').value='';
+    document.getElementById('login-error').style.display = 'block';
+    document.getElementById('admin-pw').value = '';
     document.getElementById('admin-pw').focus();
   }
 }
 
-/* -------- Panel -------- */
-function renderConfigStatus(){
-  const el=document.getElementById('admin-config-status');
-  if(!el) return;
-  const issues=[];
-  if(!CONFIG.BREVO_API_KEY) issues.push('Clé API Brevo non renseignée — les notifications email sont désactivées.');
-  // Token admin vérifié côté serveur (Cloudflare Worker) — aucun mot de passe en clair ici.
-  if(issues.length===0){
-    el.innerHTML=\`<div style="background:#EAFAF1;border:1px solid #A9DFBF;border-radius:8px;padding:10px 16px;font-size:13px;color:#1E8449;display:flex;align-items:center;gap:8px">✅ <span>Configuration OK — email Brevo actif.</span></div>\`;
-  } else {
-    el.innerHTML=\`<div style="background:#FEF9E7;border:1px solid #F9E79F;border-radius:8px;padding:12px 16px;font-size:13px;color:#7D6608">
-      <div style="font-weight:700;margin-bottom:6px">⚠️ Configuration incomplète</div>
-      <ul style="margin:0;padding-left:1.2rem">\${issues.map(i=>\`<li style="margin-bottom:4px">\${i}</li>\`).join('')}</ul>
-      <div style="margin-top:8px;font-size:12px;color:#999">Modifiez le bloc <code>CONFIG</code> en haut du fichier HTML.</div>
-    </div>\`;
-  }
-}
+function openAdminPanel() { document.getElementById('admin-panel').classList.add('open'); document.body.style.overflow = 'hidden'; renderAdminList(); }
+function quitAdmin() { document.getElementById('admin-panel').classList.remove('open'); document.body.style.overflow = ''; rebuildPublicPage(); }
 
-function openAdminPanel(){
-  document.getElementById('admin-panel').classList.add('open');
-  document.body.style.overflow='hidden';
-  renderConfigStatus();
-  renderAdminList();
-}
-function quitAdmin(){
-  document.getElementById('admin-panel').classList.remove('open');
-  document.body.style.overflow='';
-  // re-render la page publique avec les données mises à jour
-  rebuildPublicPage();
-}
-
-/* -------- Admin list -------- */
-const typeColors={stage:'#2980B9',competition:'#C0392B',seminaire:'#2980B9',grade:'#6C3483'};
-const typeLabels={stage:'Stage',competition:'Compétition',seminaire:'Séminaire',grade:'Passage de grade'};
-
-function fmtDate(d1,d2){
-  if(!d1) return '—';
-  const opt={day:'numeric',month:'long',year:'numeric'};
-  const s=new Date(d1).toLocaleDateString('fr-FR',opt);
-  if(d2){const e=new Date(d2).toLocaleDateString('fr-FR',opt);return s+' – '+e;}
+function fmtDate(d1, d2) {
+  if (!d1) return '—';
+  const opt = { day: 'numeric', month: 'long', year: 'numeric' };
+  const s = new Date(d1).toLocaleDateString('fr-FR', opt);
+  if (d2) { return s + ' – ' + new Date(d2).toLocaleDateString('fr-FR', opt); }
   return s;
 }
 
-function renderAdminList(){
-  const list=document.getElementById('admin-events-list');
-  document.getElementById('admin-event-count').textContent=adminEvents.length;
-  if(adminEvents.length===0){
-    list.innerHTML=\`<div class="admin-empty"><div class="admin-empty-icon">📭</div><div style="font-weight:600;margin-bottom:6px">Aucun événement</div><div style="font-size:14px">Créez votre premier événement avec le bouton ci-dessus.</div></div>\`;
+function renderAdminList() {
+  const list = document.getElementById('admin-events-list');
+  document.getElementById('admin-event-count').textContent = adminEvents.length;
+  if (adminEvents.length === 0) {
+    list.innerHTML = '<div class="admin-empty"><div class="admin-empty-icon">📭</div><div>Aucun événement</div></div>';
     return;
   }
-  list.innerHTML=adminEvents.map(ev=>{
-    const spotsClass=ev.spots===0?'spots-full':ev.spots<=5?'spots-low':'spots-ok';
-    const spotsTxt=ev.spots===0?'Complet':ev.spots+' places';
-    const priceTxt=ev.price===0?'Gratuit':'€'+ev.price;
-    const soldOut=ev.status==='complet';
-    return \`<div class="admin-event-row\${soldOut?' sold-out':''}">
-      <div class="admin-event-color" style="background:\${typeColors[ev.type]||'#999'}"></div>
-      <div class="admin-event-info">
-        <div class="admin-event-name">\${ev.title}\${ev.featured?' ⭐':''}</div>
-        <div class="admin-event-meta">\${typeLabels[ev.type]||ev.type} · \${fmtDate(ev.dateStart,ev.dateEnd)} · \${ev.lieu}</div>
-      </div>
-      <div class="admin-event-badges">
-        <span class="admin-spots-badge \${spotsClass}">\${spotsTxt}</span>
-      </div>
-      <div class="admin-price-tag">\${priceTxt}</div>
-      <div class="admin-actions">
-        <button class="admin-btn-edit" onclick="openEventForm('\${ev.id}')">✏ Modifier</button>
-        <button class="admin-btn-del" onclick="askDelete('\${ev.id}')">🗑 Supprimer</button>
-      </div>
-    </div>\`;
+  list.innerHTML = adminEvents.map(ev => {
+    const spotsClass = ev.spots === 0 ? 'spots-full' : ev.spots <= 5 ? 'spots-low' : 'spots-ok';
+    const spotsTxt = ev.spots === 0 ? 'Complet' : ev.spots + ' places';
+    const priceTxt = ev.price === 0 ? 'Gratuit' : '€' + ev.price;
+    const soldOut = ev.status === 'complet';
+    return '<div class="admin-event-row' + (soldOut ? ' sold-out' : '') + '">' +
+      '<div class="admin-event-color" style="background:' + (typeColors[ev.type] || '#999') + '"></div>' +
+      '<div class="admin-event-info"><div class="admin-event-name">' + ev.title + (ev.featured ? ' ⭐' : '') + '</div>' +
+      '<div class="admin-event-meta">' + (typeLabels[ev.type] || ev.type) + ' · ' + fmtDate(ev.dateStart, ev.dateEnd) + ' · ' + ev.lieu + '</div></div>' +
+      '<div class="admin-event-badges"><span class="admin-spots-badge ' + spotsClass + '">' + spotsTxt + '</span></div>' +
+      '<div class="admin-price-tag">' + priceTxt + '</div>' +
+      '<div class="admin-actions">' +
+      '<button class="admin-btn-edit" onclick="openEventForm(\'' + ev.id + '\')">✏ Modifier</button>' +
+      '<button class="admin-btn-del" onclick="askDelete(\'' + ev.id + '\')">🗑 Supprimer</button>' +
+      '</div></div>';
   }).join('');
 }
 
-/* -------- Event form -------- */
-function openEventForm(id){
-  const isNew=!id;
-  document.getElementById('admin-modal-title').textContent=isNew?'NOUVEL ÉVÉNEMENT':'MODIFIER L\\'ÉVÉNEMENT';
-  // reset
-  ['ae-title','ae-sub','ae-date-start','ae-date-end','ae-time-start','ae-time-end','ae-lieu','ae-price','ae-spots','ae-helloasso-url'].forEach(f=>{document.getElementById(f).value='';});
-  document.getElementById('ae-id').value=id||'';
-  document.getElementById('ae-featured').checked=false;
-  document.getElementById('ae-isGrade').checked=false;
-  document.getElementById('ae-helloasso').checked=false;
-  document.getElementById('ae-ha-url-group').style.display='none';
-  // reset toggles
-  document.querySelectorAll('#ae-type-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
+function openEventForm(id) {
+  const isNew = !id;
+  document.getElementById('admin-modal-title').textContent = isNew ? 'NOUVEL ÉVÉNEMENT' : "MODIFIER L'ÉVÉNEMENT";
+  ['ae-title', 'ae-sub', 'ae-date-start', 'ae-date-end', 'ae-time-start', 'ae-time-end', 'ae-lieu', 'ae-price', 'ae-spots', 'ae-helloasso-url'].forEach(f => { document.getElementById(f).value = ''; });
+  document.getElementById('ae-id').value = id || '';
+  document.getElementById('ae-featured').checked = false;
+  document.getElementById('ae-isGrade').checked = false;
+  document.getElementById('ae-helloasso').checked = false;
+  document.getElementById('ae-ha-url-group').style.display = 'none';
+  document.querySelectorAll('#ae-type-group .admin-toggle-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('#ae-status-group [data-val="disponible"]').classList.add('active');
-
-  if(!isNew){
-    const ev=adminEvents.find(e=>e.id===id);
-    if(!ev) return;
-    document.getElementById('ae-title').value=ev.title;
-    document.getElementById('ae-sub').value=ev.sub;
-    document.getElementById('ae-date-start').value=ev.dateStart||'';
-    document.getElementById('ae-date-end').value=ev.dateEnd||'';
-    document.getElementById('ae-time-start').value=ev.timeStart||'';
-    document.getElementById('ae-time-end').value=ev.timeEnd||'';
-    document.getElementById('ae-lieu').value=ev.lieu||'';
-    document.getElementById('ae-price').value=ev.price;
-    document.getElementById('ae-spots').value=ev.spots;
-    document.getElementById('ae-featured').checked=!!ev.featured;
-    document.getElementById('ae-isGrade').checked=!!ev.isGrade;
-    document.getElementById('ae-helloasso').checked=!!ev.helloasso;
-    document.getElementById('ae-helloasso-url').value=ev.helloasso_url||'';
-    document.getElementById('ae-ha-url-group').style.display=ev.helloasso?'block':'none';
-    // set toggles
-    const typeBtn=document.querySelector(\`#ae-type-group [data-val="\${ev.type}"]\`);
-    if(typeBtn) typeBtn.classList.add('active');
-    document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
-    const stBtn=document.querySelector(\`#ae-status-group [data-val="\${ev.status}"]\`);
-    if(stBtn) stBtn.classList.add('active');
+  if (!isNew) {
+    const ev = adminEvents.find(e => e.id === id);
+    if (!ev) return;
+    document.getElementById('ae-title').value = ev.title;
+    document.getElementById('ae-sub').value = ev.sub;
+    document.getElementById('ae-date-start').value = ev.dateStart || '';
+    document.getElementById('ae-date-end').value = ev.dateEnd || '';
+    document.getElementById('ae-time-start').value = ev.timeStart || '';
+    document.getElementById('ae-time-end').value = ev.timeEnd || '';
+    document.getElementById('ae-lieu').value = ev.lieu || '';
+    document.getElementById('ae-price').value = ev.price;
+    document.getElementById('ae-spots').value = ev.spots;
+    document.getElementById('ae-featured').checked = !!ev.featured;
+    document.getElementById('ae-isGrade').checked = !!ev.isGrade;
+    document.getElementById('ae-helloasso').checked = !!ev.helloasso;
+    document.getElementById('ae-helloasso-url').value = ev.helloasso_url || '';
+    document.getElementById('ae-ha-url-group').style.display = ev.helloasso ? 'block' : 'none';
+    const typeBtn = document.querySelector('#ae-type-group [data-val="' + ev.type + '"]');
+    if (typeBtn) typeBtn.classList.add('active');
+    document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b => b.classList.remove('active'));
+    const stBtn = document.querySelector('#ae-status-group [data-val="' + ev.status + '"]');
+    if (stBtn) stBtn.classList.add('active');
   }
   document.getElementById('admin-event-modal').classList.add('open');
 }
-function closeEventForm(){
-  document.getElementById('admin-event-modal').classList.remove('open');
-}
-function selectToggle(groupId,btn){
-  document.querySelectorAll('#'+groupId+' .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
+
+function closeEventForm() { document.getElementById('admin-event-modal').classList.remove('open'); }
+
+function selectToggle(groupId, btn) {
+  document.querySelectorAll('#' + groupId + ' .admin-toggle-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
-function toggleHAUrl(){
-  document.getElementById('ae-ha-url-group').style.display=document.getElementById('ae-helloasso').checked?'block':'none';
-}
 
-async function saveEvent(){
-  const title=document.getElementById('ae-title').value.trim();
-  const sub=document.getElementById('ae-sub').value.trim();
-  const dateStart=document.getElementById('ae-date-start').value;
-  const lieu=document.getElementById('ae-lieu').value.trim();
-  const priceVal=document.getElementById('ae-price').value;
-  const spotsVal=document.getElementById('ae-spots').value;
-  const typeBtn=document.querySelector('#ae-type-group .admin-toggle-btn.active');
-  if(!title||!sub||!dateStart||!lieu||priceVal===''||spotsVal===''){
-    alert('Veuillez remplir tous les champs obligatoires (marqués d\\'un *).'); return;
-  }
-  if(!typeBtn){alert('Veuillez sélectionner un type d\\'événement.'); return;}
+function toggleHAUrl() { document.getElementById('ae-ha-url-group').style.display = document.getElementById('ae-helloasso').checked ? 'block' : 'none'; }
 
-  const statusBtn=document.querySelector('#ae-status-group .admin-toggle-btn.active');
-  const existingId=document.getElementById('ae-id').value;
-  const spotsInt=parseInt(spotsVal)||0;
-
-  const payload={
-    title, sub,
-    type: typeBtn.dataset.val,
-    date_start:  dateStart,
-    date_end:    document.getElementById('ae-date-end').value||null,
-    time_start:  document.getElementById('ae-time-start').value||null,
-    time_end:    document.getElementById('ae-time-end').value||null,
-    lieu,
-    price:       parseFloat(priceVal)||0,
-    spots_total: spotsInt,
-    spots_left:  existingId ? undefined : spotsInt,
-    status:      statusBtn?statusBtn.dataset.val:'disponible',
-    featured:    document.getElementById('ae-featured').checked,
-    is_grade:    document.getElementById('ae-isGrade').checked,
-    helloasso:   document.getElementById('ae-helloasso').checked,
-    helloasso_url: document.getElementById('ae-helloasso-url').value.trim()||null
+async function saveEvent() {
+  const title = document.getElementById('ae-title').value.trim();
+  const sub = document.getElementById('ae-sub').value.trim();
+  const dateStart = document.getElementById('ae-date-start').value;
+  const lieu = document.getElementById('ae-lieu').value.trim();
+  const priceVal = document.getElementById('ae-price').value;
+  const spotsVal = document.getElementById('ae-spots').value;
+  const typeBtn = document.querySelector('#ae-type-group .admin-toggle-btn.active');
+  if (!title || !sub || !dateStart || !lieu || priceVal === '' || spotsVal === '') { alert("Veuillez remplir tous les champs obligatoires."); return; }
+  if (!typeBtn) { alert("Veuillez sélectionner un type d'événement."); return; }
+  const statusBtn = document.querySelector('#ae-status-group .admin-toggle-btn.active');
+  const existingId = document.getElementById('ae-id').value;
+  const spotsInt = parseInt(spotsVal) || 0;
+  const payload = {
+    title, sub, type: typeBtn.dataset.val,
+    date_start: dateStart, date_end: document.getElementById('ae-date-end').value || null,
+    time_start: document.getElementById('ae-time-start').value || null, time_end: document.getElementById('ae-time-end').value || null,
+    lieu, price: parseFloat(priceVal) || 0,
+    spots_total: spotsInt, spots_left: existingId ? undefined : spotsInt,
+    status: statusBtn ? statusBtn.dataset.val : 'disponible',
+    featured: document.getElementById('ae-featured').checked, is_grade: document.getElementById('ae-isGrade').checked,
+    helloasso: document.getElementById('ae-helloasso').checked, helloasso_url: document.getElementById('ae-helloasso-url').value.trim() || null
   };
-
   try {
-    let saved;
-    if(existingId){
-      saved = await API.adminPut('/api/events/' + existingId, payload);
-    } else {
-      saved = await API.adminPost('/api/events', payload);
-    }
+    const saved = existingId ? await API.adminPut('/api/events/' + existingId, payload) : await API.adminPost('/api/events', payload);
     const norm = normalizeEvent(saved);
-    const idx = adminEvents.findIndex(e=>e.id===norm.id);
-    if(idx>=0) adminEvents[idx]=norm; else adminEvents.push(norm);
-    events[norm.id]={title:norm.title,sub:buildSubText(norm),price:norm.price,helloasso:norm.helloasso,helloasso_url:norm.helloasso_url,isGrade:norm.isGrade};
+    const idx = adminEvents.findIndex(e => e.id === norm.id);
+    if (idx >= 0) adminEvents[idx] = norm; else adminEvents.push(norm);
+    events[norm.id] = { title: norm.title, sub: buildSubText(norm), price: norm.price, helloasso: norm.helloasso, helloasso_url: norm.helloasso_url, isGrade: norm.isGrade };
     closeEventForm();
     renderAdminList();
-  } catch(e) {
-    alert('Erreur lors de la sauvegarde : ' + e.message);
-  }
+  } catch (e) { alert('Erreur lors de la sauvegarde : ' + e.message); }
 }
 
-/* -------- Delete -------- */
-function askDelete(id){
-  const ev=adminEvents.find(e=>e.id===id);
-  if(!ev) return;
-  pendingDeleteId=id;
-  document.getElementById('confirm-msg').textContent=\`Voulez-vous vraiment supprimer "\${ev.title}" ? Cette action est irréversible.\`;
+function askDelete(id) {
+  const ev = adminEvents.find(e => e.id === id);
+  if (!ev) return;
+  pendingDeleteId = id;
+  document.getElementById('confirm-msg').textContent = 'Voulez-vous vraiment supprimer "' + ev.title + '" ? Cette action est irréversible.';
   document.getElementById('confirm-overlay').classList.add('open');
-  document.getElementById('confirm-yes-btn').onclick=()=>doDelete();
+  document.getElementById('confirm-yes-btn').onclick = () => doDelete();
 }
-async function doDelete(){
-  if(!pendingDeleteId) return;
+
+async function doDelete() {
+  if (!pendingDeleteId) return;
   try {
     await API.adminDelete('/api/events/' + pendingDeleteId);
-    adminEvents=adminEvents.filter(e=>e.id!==pendingDeleteId);
+    adminEvents = adminEvents.filter(e => e.id !== pendingDeleteId);
     delete events[pendingDeleteId];
-    pendingDeleteId=null;
+    pendingDeleteId = null;
     closeConfirm();
     renderAdminList();
     rebuildPublicPage();
-  } catch(e) {
-    alert('Erreur lors de la suppression : ' + e.message);
-    closeConfirm();
-  }
-}
-function closeConfirm(){
-  document.getElementById('confirm-overlay').classList.remove('open');
+  } catch (e) { alert('Erreur lors de la suppression : ' + e.message); closeConfirm(); }
 }
 
-/* -------- Rebuild public page -------- */
-function rebuildPublicPage(){
-  // Mise à jour de l'objet events (pour les modals)
-  const newEventsObj={};
-  adminEvents.forEach(ev=>{
-    newEventsObj[ev.id]={
-      title:ev.title,
-      sub:buildSubText(ev),
-      price:ev.price,
-      helloasso:ev.helloasso,
-      helloasso_url:ev.helloasso_url,
-      isGrade:ev.isGrade
-    };
-  });
+function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
+
+function buildSubText(ev) {
+  const typeLbl = typeLabels[ev.type] || ev.type;
+  const d = fmtDate(ev.dateStart, ev.dateEnd);
+  return typeLbl + ' · ' + d + ' · ' + ev.lieu;
+}
+
+function rebuildPublicPage() {
+  const newEventsObj = {};
+  adminEvents.forEach(ev => { newEventsObj[ev.id] = { title: ev.title, sub: buildSubText(ev), price: ev.price, helloasso: ev.helloasso, helloasso_url: ev.helloasso_url, isGrade: ev.isGrade }; });
   Object.assign(events, newEventsObj);
-  // Supprimer les clés qui ont été effacées
-  Object.keys(events).forEach(k=>{if(!newEventsObj[k]) delete events[k];});
-
-  // Re-générer les cartes HTML
-  const grid=document.getElementById('events-grid');
-  grid.innerHTML=adminEvents.map(ev=>buildCard(ev)).join('');
+  Object.keys(events).forEach(k => { if (!newEventsObj[k]) delete events[k]; });
+  const grid = document.getElementById('events-grid');
+  if (adminEvents.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;color:#999;font-size:14px">Aucun événement à venir pour le moment.</div>';
+    return;
+  }
+  grid.innerHTML = adminEvents.map(ev => buildCard(ev)).join('');
 }
 
-function buildSubText(ev){
-  const typeLbl=typeLabels[ev.type]||ev.type;
-  const d=fmtDate(ev.dateStart,ev.dateEnd);
-  return \`\${typeLbl} · \${d} · \${ev.lieu}\`;
-}
-
-function buildCard(ev){
-  const typeBadge={
-    stage:'<span class="badge badge-stage">Stage</span>',
-    competition:'<span class="badge badge-compet">Compétition</span>',
-    seminaire:'<span class="badge badge-stage">Séminaire</span>',
-    grade:'<span class="badge badge-grade">Passage de grade</span>'
-  }[ev.type]||'<span class="badge">Événement</span>';
-
-  const sold=ev.status==='complet';
-  const low=!sold&&ev.spots>0&&ev.spots<=5;
-  const spotsTxt=sold?'0 place disponible':low?\`⚡ \${ev.spots} places restantes\`:\`\${ev.spots} places\`;
-  const spotsClass=sold?'full':low?'low':'';
-
-  const priceTxt=ev.price===0?'<span class="free">Gratuit</span>':\`<sup>€</sup>\${ev.price}\`;
-  const btnClass=sold?'disabled':ev.price===0?'outline':'primary';
-  const btnTxt=sold?'Complet':"S'inscrire →";
-  const onclick=sold?'':\`onclick="openModal('\${ev.id}')"\`;
-  const cardOnclick=sold?'':\`onclick="openModal('\${ev.id}')"\`;
-  const stopProp=sold?'':\`onclick="event.stopPropagation();openModal('\${ev.id}')"\`;
-  const featured=ev.featured?' featured':'';
-  const opacity=sold?' style="opacity:.6;pointer-events:none;"':'';
-
-  const d=fmtDate(ev.dateStart,ev.dateEnd);
-  const horaires=ev.timeStart&&ev.timeEnd?\`<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>\${ev.timeStart} – \${ev.timeEnd}</div>\`:'';
-
-  return \`<div class="event-card\${featured}" data-type="\${ev.type}\${ev.price===0?' gratuit':''}" \${cardOnclick}\${opacity}>
-    <div class="card-badge-row">\${typeBadge}<span class="card-spots \${spotsClass}">\${spotsTxt}</span></div>
-    <div class="card-body">
-      <div class="card-title">\${ev.title}</div>
-      <div class="card-subtitle">\${ev.sub}</div>
-      <div class="card-meta">
-        <div class="card-meta-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>\${d}</div>
-        <div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>\${ev.lieu}</div>
-        \${horaires}
-      </div>
-    </div>
-    <div class="card-footer">
-      <div class="card-price">\${priceTxt}</div>
-      <button class="btn-inscr \${btnClass}" \${stopProp}>\${btnTxt}</button>
-    </div>
-  </div>\`;
+function buildCard(ev) {
+  const typeBadge = { stage: '<span class="badge badge-stage">Stage</span>', competition: '<span class="badge badge-compet">Compétition</span>', seminaire: '<span class="badge badge-stage">Séminaire</span>', grade: '<span class="badge badge-grade">Passage de grade</span>' }[ev.type] || '<span class="badge">Événement</span>';
+  const sold = ev.status === 'complet';
+  const low = !sold && ev.spots > 0 && ev.spots <= 5;
+  const spotsTxt = sold ? '0 place disponible' : low ? '⚡ ' + ev.spots + ' places restantes' : ev.spots + ' places';
+  const spotsClass = sold ? 'full' : low ? 'low' : '';
+  const priceTxt = ev.price === 0 ? '<span class="free">Gratuit</span>' : '<sup>€</sup>' + ev.price;
+  const btnClass = sold ? 'disabled' : ev.price === 0 ? 'outline' : 'primary';
+  const btnTxt = sold ? 'Complet' : "S'inscrire →";
+  const cardOnclick = sold ? '' : 'onclick="openModal(\'' + ev.id + '\')"';
+  const stopProp = sold ? '' : 'onclick="event.stopPropagation();openModal(\'' + ev.id + '\')"';
+  const featured = ev.featured ? ' featured' : '';
+  const opacity = sold ? ' style="opacity:.6;pointer-events:none;"' : '';
+  const d = fmtDate(ev.dateStart, ev.dateEnd);
+  const horaires = ev.timeStart && ev.timeEnd ? '<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + ev.timeStart + ' – ' + ev.timeEnd + '</div>' : '';
+  return '<div class="event-card' + featured + '" data-type="' + ev.type + (ev.price === 0 ? ' gratuit' : '') + '" ' + cardOnclick + opacity + '>' +
+    '<div class="card-badge-row">' + typeBadge + '<span class="card-spots ' + spotsClass + '">' + spotsTxt + '</span></div>' +
+    '<div class="card-body"><div class="card-title">' + ev.title + '</div><div class="card-subtitle">' + ev.sub + '</div>' +
+    '<div class="card-meta"><div class="card-meta-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + d + '</div>' +
+    '<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>' + ev.lieu + '</div>' + horaires + '</div></div>' +
+    '<div class="card-footer"><div class="card-price">' + priceTxt + '</div><button class="btn-inscr ' + btnClass + '" ' + stopProp + '>' + btnTxt + '</button></div></div>';
 }
 </script>
 </body>
 </html>
 `;
 
-// ── HelloAsso OAuth2 — obtenir un token ──────────────────────
-async function getHelloAssoToken(env) {
-  const resp = await fetch('https://api.helloasso.com/oauth2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type:    'client_credentials',
-      client_id:     env.HELLOASSO_CLIENT_ID,
-      client_secret: env.HELLOASSO_CLIENT_SECRET,
-    })
-  });
-  if (!resp.ok) throw new ApiError('Erreur authentification HelloAsso', 502);
-  const data = await resp.json();
-  return data.access_token;
-}
-
-// ── HelloAsso — créer une session Checkout ───────────────────
-async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom, nom, returnUrl, errorUrl }) {
-  const token = await getHelloAssoToken(env);
-  const resp = await fetch(
-    `https://api.helloasso.com/v5/organizations/${env.HELLOASSO_ORG_SLUG}/checkout-intents`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        totalAmount:        amount * 100, // en centimes
-        initialAmount:      amount * 100,
-        itemName:           eventTitle,
-        backUrl:            errorUrl,
-        errorUrl:           errorUrl,
-        returnUrl:          returnUrl,
-        containsDonation:   false,
-        payer: {
-          email,
-          firstName: prenom,
-          lastName:  nom,
-        }
-      })
-    }
-  );
-  if (!resp.ok) {
-    const e = await resp.json();
-    console.error('HelloAsso checkout error:', e);
-    throw new ApiError('Erreur création checkout HelloAsso', 502);
-  }
-  const data = await resp.json();
-  return data.redirectUrl; // URL vers laquelle rediriger l'utilisateur
-}
-
-export default {
-  async fetch(request, env) {
-    const url    = new URL(request.url);
-    const path   = url.pathname;
-    const method = request.method.toUpperCase();
-
-    // ── Servir index.html sur GET / ──────────────────────────
-    if (method === 'GET' && (path === '/' || path === '')) {
-      return new Response(INDEX_HTML, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'public, max-age=300',
-        },
-      });
-    }
-
-    // ── CORS ─────────────────────────────────────────────────
-    const corsHeaders = {
-      'Access-Control-Allow-Origin':  '*',   // restreignez à votre domaine en prod
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
-    if (method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
-    }
-
-    // ── Helpers ─────────────────────────────────────────────────
-    const json = (data, status = 200) =>
-      new Response(JSON.stringify(data), {
-        status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-
-    const err = (msg, status = 400) => json({ error: msg }, status);
-
-    // Authentification admin simple par Bearer token
-    const isAdmin = () => {
-      const auth  = request.headers.get('Authorization') || '';
-      const token = auth.replace('Bearer ', '').trim();
-      return token !== '' && token === (env.ADMIN_TOKEN || '');
-    };
-
-    const requireAdmin = () => {
-      if (!isAdmin()) throw new ApiError('Non autorisé', 401);
-    };
-
-    // Génère un id type "evt" + timestamp court
-    const genId = (prefix = 'evt') =>
-      `${prefix}${Date.now().toString(36)}`;
-
-    // Segments du chemin
-    const segments = path.replace(/^\/api\//, '').split('/');
-    const resource = segments[0];  // "events" | "registrations"
-    const resId    = segments[1];  // id ou undefined
-    const subRes   = segments[2];  // "status" ou undefined
-
-    try {
-      // ════════════════════════════════════════════════════════
-      //  EVENTS
-      // ════════════════════════════════════════════════════════
-      if (resource === 'events') {
-
-        // GET /api/events
-        if (method === 'GET' && !resId) {
-          const { results } = await env.DB.prepare(
-            `SELECT * FROM events ORDER BY date_start ASC`
-          ).all();
-          return json(results);
-        }
-
-        // GET /api/events/:id
-        if (method === 'GET' && resId) {
-          const ev = await env.DB.prepare(
-            `SELECT * FROM events WHERE id = ?`
-          ).bind(resId).first();
-          if (!ev) return err('Événement introuvable', 404);
-
-          // Ajouter le nombre d'inscrits validés
-          const count = await env.DB.prepare(
-            `SELECT COUNT(*) as total FROM registrations
-             WHERE event_id = ? AND paiement_status IN ('paye','gratuit')`
-          ).bind(resId).first();
-
-          return json({ ...ev, registrations_count: count?.total ?? 0 });
-        }
-
-        // POST /api/events  [admin]
-        if (method === 'POST') {
-          requireAdmin();
-          const body = await request.json();
-          const id   = body.id || genId('evt');
-          validateEvent(body);
-
-          await env.DB.prepare(`
-            INSERT INTO events
-              (id, title, sub, type, status, date_start, date_end, time_start, time_end,
-               lieu, price, spots_total, spots_left, featured, is_grade, helloasso, helloasso_url)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          `).bind(
-            id,
-            body.title, body.sub, body.type,
-            body.status ?? 'disponible',
-            body.date_start, body.date_end ?? null,
-            body.time_start ?? null, body.time_end ?? null,
-            body.lieu,
-            body.price ?? 0,
-            body.spots_total ?? 0,
-            body.spots_left  ?? body.spots_total ?? 0,
-            body.featured    ? 1 : 0,
-            body.is_grade    ? 1 : 0,
-            body.helloasso   ? 1 : 0,
-            body.helloasso_url ?? null,
-          ).run();
-
-          const created = await env.DB.prepare(
-            `SELECT * FROM events WHERE id = ?`
-          ).bind(id).first();
-          return json(created, 201);
-        }
-
-        // PUT /api/events/:id  [admin]
-        if (method === 'PUT' && resId) {
-          requireAdmin();
-          const body = await request.json();
-          validateEvent(body);
-
-          await env.DB.prepare(`
-            UPDATE events SET
-              title = ?, sub = ?, type = ?, status = ?,
-              date_start = ?, date_end = ?,
-              time_start = ?, time_end = ?,
-              lieu = ?, price = ?,
-              spots_total = ?, spots_left = ?,
-              featured = ?, is_grade = ?,
-              helloasso = ?, helloasso_url = ?
-            WHERE id = ?
-          `).bind(
-            body.title, body.sub, body.type,
-            body.status ?? 'disponible',
-            body.date_start, body.date_end ?? null,
-            body.time_start ?? null, body.time_end ?? null,
-            body.lieu,
-            body.price ?? 0,
-            body.spots_total ?? 0,
-            body.spots_left  ?? body.spots_total ?? 0,
-            body.featured    ? 1 : 0,
-            body.is_grade    ? 1 : 0,
-            body.helloasso   ? 1 : 0,
-            body.helloasso_url ?? null,
-            resId,
-          ).run();
-
-          const updated = await env.DB.prepare(
-            `SELECT * FROM events WHERE id = ?`
-          ).bind(resId).first();
-          if (!updated) return err('Événement introuvable', 404);
-          return json(updated);
-        }
-
-        // DELETE /api/events/:id  [admin]
-        if (method === 'DELETE' && resId) {
-          requireAdmin();
-          const info = await env.DB.prepare(
-            `DELETE FROM events WHERE id = ?`
-          ).bind(resId).run();
-          if (info.changes === 0) return err('Événement introuvable', 404);
-          return json({ deleted: resId });
-        }
-      }
-
-      // CHECKOUT HELLOASSO
-      if (resource === 'checkout' && method === 'POST') {
-        const body = await request.json();
-        const { event_id, nom, prenom, email } = body;
-        if (!event_id || !nom || !prenom || !email) {
-          return err('Champs requis : event_id, nom, prenom, email');
-        }
-
-        const ev = await env.DB.prepare(
-          'SELECT * FROM events WHERE id = ?'
-        ).bind(event_id).first();
-        if (!ev)              return err('Evenement introuvable', 404);
-        if (ev.price === 0)   return err('Evenement gratuit, pas de checkout', 400);
-        if (ev.status === 'complet') return err('Evenement complet', 409);
-
-        const baseUrl   = new URL(request.url).origin;
-        const returnUrl = baseUrl + '/?paiement=ok&event=' + event_id;
-        const errorUrl  = baseUrl + '/?paiement=erreur&event=' + event_id;
-
-        const redirectUrl = await createHelloAssoCheckout(env, {
-          eventTitle: ev.title,
-          amount:     ev.price,
-          email, prenom, nom,
-          returnUrl, errorUrl,
-        });
-
-        return json({ redirectUrl });
-      }
-
-      return err('Route introuvable', 404);  // ← cette ligne reste en dernier
-      
-    } catch (e) {
-      if (e instanceof ApiError) return err(e.message, e.status);
-      console.error(e);
-      return err('Erreur serveur interne', 500);
-    }
-  },
-};
-
-      // ════════════════════════════════════════════════════════
-      //  REGISTRATIONS
-      // ════════════════════════════════════════════════════════
-      if (resource === 'registrations') {
-
-        // GET /api/registrations  [admin]
-        if (method === 'GET' && !resId) {
-          requireAdmin();
-          const eventFilter = url.searchParams.get('event_id');
-          const statusFilter = url.searchParams.get('status');
-
-          let query  = `SELECT r.*, e.title as event_title
-                        FROM registrations r
-                        JOIN events e ON e.id = r.event_id
-                        WHERE 1=1`;
-          const params = [];
-
-          if (eventFilter) { query += ` AND r.event_id = ?`; params.push(eventFilter); }
-          if (statusFilter) { query += ` AND r.paiement_status = ?`; params.push(statusFilter); }
-          query += ` ORDER BY r.created_at DESC`;
-
-          const stmt = env.DB.prepare(query);
-          const { results } = await (params.length ? stmt.bind(...params) : stmt).all();
-          return json(results);
-        }
-
-        // GET /api/registrations/:id  [admin]
-        if (method === 'GET' && resId && !subRes) {
-          requireAdmin();
-          const reg = await env.DB.prepare(
-            `SELECT r.*, e.title as event_title, e.price as event_price
-             FROM registrations r
-             JOIN events e ON e.id = r.event_id
-             WHERE r.id = ?`
-          ).bind(resId).first();
-          if (!reg) return err('Inscription introuvable', 404);
-          return json(reg);
-        }
-
-        // POST /api/registrations  [public]
-        if (method === 'POST' && !resId) {
-          const body = await request.json();
-          validateRegistration(body);
-
-          // Vérifier que l'événement existe et n'est pas complet
-          const ev = await env.DB.prepare(
-            `SELECT * FROM events WHERE id = ?`
-          ).bind(body.event_id).first();
-          if (!ev)             return err('Événement introuvable', 404);
-          if (ev.status === 'complet') return err('Événement complet', 409);
-          if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
-
-          const paiementStatus = ev.price === 0 ? 'gratuit' : 'en_attente';
-
-          const info = await env.DB.prepare(`
-            INSERT INTO registrations (
-              event_id, nom, prenom, date_naissance, telephone, email,
-              licence_ffk, is_mineur,
-              categorie, niveau, regime,
-              ceinture_actuelle, ceinture_visee,
-              parent_nom, parent_prenom, parent_tel,
-              message, certif_medical, droit_image, reglement_ok,
-              montant, paiement_status, helloasso_ref
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          `).bind(
-            body.event_id,
-            body.nom, body.prenom, body.date_naissance,
-            body.telephone, body.email,
-            body.licence_ffk   ?? null,
-            body.is_mineur     ? 1 : 0,
-            body.categorie     ?? null,
-            body.niveau        ?? null,
-            body.regime        ?? null,
-            body.ceinture_actuelle ?? null,
-            body.ceinture_visee    ?? null,
-            body.parent_nom    ?? null,
-            body.parent_prenom ?? null,
-            body.parent_tel    ?? null,
-            body.message       ?? null,
-            body.certif_medical ? 1 : 0,
-            body.droit_image    ? 1 : 0,
-            body.reglement_ok   ? 1 : 0,
-            ev.price,
-            paiementStatus,
-            body.helloasso_ref ?? null,
-          ).run();
-
-          return json({
-            id:              info.meta.last_row_id,
-            event_id:        body.event_id,
-            paiement_status: paiementStatus,
-            montant:         ev.price,
-          }, 201);
-        }
-
-        // PUT /api/registrations/:id/status  [admin]
-        if (method === 'PUT' && resId && subRes === 'status') {
-          requireAdmin();
-          const body = await request.json();
-          const validStatuses = ['en_attente','paye','gratuit','annule'];
-          if (!validStatuses.includes(body.paiement_status)) {
-            return err(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
-          }
-
-          const info = await env.DB.prepare(`
-            UPDATE registrations
-            SET paiement_status = ?,
-                helloasso_ref   = COALESCE(?, helloasso_ref)
-            WHERE id = ?
-          `).bind(body.paiement_status, body.helloasso_ref ?? null, resId).run();
-
-          if (info.changes === 0) return err('Inscription introuvable', 404);
-          return json({ id: resId, paiement_status: body.paiement_status });
-        }
-
-        // DELETE /api/registrations/:id  [admin]
-        if (method === 'DELETE' && resId) {
-          requireAdmin();
-          const info = await env.DB.prepare(
-            `DELETE FROM registrations WHERE id = ?`
-          ).bind(resId).run();
-          if (info.changes === 0) return err('Inscription introuvable', 404);
-          return json({ deleted: Number(resId) });
-        }
-      }
-
-
 // ── Classe d'erreur métier ─────────────────────────────────────
+// IMPORTANT : déclarée AVANT export default pour rester au niveau module
 class ApiError extends Error {
   constructor(message, status = 400) {
     super(message);
@@ -2141,9 +1212,7 @@ function validateEvent(body) {
 
 // ── Validation inscription ─────────────────────────────────────
 function validateRegistration(body) {
-  const required = [
-    'event_id', 'nom', 'prenom', 'date_naissance', 'telephone', 'email'
-  ];
+  const required = ['event_id', 'nom', 'prenom', 'date_naissance', 'telephone', 'email'];
   for (const f of required) {
     if (!body[f]) throw new ApiError(`Champ requis manquant : ${f}`);
   }
@@ -2154,3 +1223,307 @@ function validateRegistration(body) {
     throw new ApiError('Informations du représentant légal requises pour un mineur');
   }
 }
+
+// ── HelloAsso OAuth2 ───────────────────────────────────────────
+async function getHelloAssoToken(env) {
+  const resp = await fetch('https://api.helloasso.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'client_credentials',
+      client_id:     env.HELLOASSO_CLIENT_ID,
+      client_secret: env.HELLOASSO_CLIENT_SECRET,
+    })
+  });
+  if (!resp.ok) throw new ApiError('Erreur authentification HelloAsso', 502);
+  const data = await resp.json();
+  return data.access_token;
+}
+
+// ── HelloAsso — créer une session Checkout ─────────────────────
+async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom, nom, returnUrl, errorUrl }) {
+  const token = await getHelloAssoToken(env);
+  const resp = await fetch(
+    `https://api.helloasso.com/v5/organizations/${env.HELLOASSO_ORG_SLUG}/checkout-intents`,
+    {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        totalAmount:      amount * 100,
+        initialAmount:    amount * 100,
+        itemName:         eventTitle,
+        backUrl:          errorUrl,
+        errorUrl:         errorUrl,
+        returnUrl:        returnUrl,
+        containsDonation: false,
+        payer: { email, firstName: prenom, lastName: nom }
+      })
+    }
+  );
+  if (!resp.ok) {
+    const e = await resp.json();
+    console.error('HelloAsso checkout error:', e);
+    throw new ApiError('Erreur création checkout HelloAsso', 502);
+  }
+  const data = await resp.json();
+  return data.redirectUrl;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WORKER PRINCIPAL
+//  Toutes les routes sont à l'intérieur du fetch()
+// ══════════════════════════════════════════════════════════════
+export default {
+  async fetch(request, env) {
+    const url    = new URL(request.url);
+    const path   = url.pathname;
+    const method = request.method.toUpperCase();
+
+    // ── Servir index.html ──────────────────────────────────────
+    if (method === 'GET' && (path === '/' || path === '')) {
+      return new Response(INDEX_HTML, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+      });
+    }
+
+    // ── CORS ───────────────────────────────────────────────────
+    const corsHeaders = {
+      'Access-Control-Allow-Origin':  '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    if (method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    // ── Helpers internes ───────────────────────────────────────
+    const json = (data, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+
+    const err = (msg, status = 400) => json({ error: msg }, status);
+
+    const isAdmin = () => {
+      const auth  = request.headers.get('Authorization') || '';
+      const token = auth.replace('Bearer ', '').trim();
+      return token !== '' && token === (env.ADMIN_TOKEN || '');
+    };
+
+    const requireAdmin = () => {
+      if (!isAdmin()) throw new ApiError('Non autorisé', 401);
+    };
+
+    const genId = (prefix = 'evt') => `${prefix}${Date.now().toString(36)}`;
+
+    const segments = path.replace(/^\/api\//, '').split('/');
+    const resource = segments[0];
+    const resId    = segments[1];
+    const subRes   = segments[2];
+
+    try {
+      // ══════════════════════════════════════════════════════════
+      //  EVENTS
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'events') {
+
+        // GET /api/events
+        if (method === 'GET' && !resId) {
+          const { results } = await env.DB.prepare(
+            `SELECT * FROM events ORDER BY date_start ASC`
+          ).all();
+          return json(results);
+        }
+
+        // GET /api/events/:id
+        if (method === 'GET' && resId) {
+          const ev = await env.DB.prepare(
+            `SELECT * FROM events WHERE id = ?`
+          ).bind(resId).first();
+          if (!ev) return err('Événement introuvable', 404);
+          const count = await env.DB.prepare(
+            `SELECT COUNT(*) as total FROM registrations WHERE event_id = ? AND paiement_status IN ('paye','gratuit')`
+          ).bind(resId).first();
+          return json({ ...ev, registrations_count: count?.total ?? 0 });
+        }
+
+        // POST /api/events [admin]
+        if (method === 'POST') {
+          requireAdmin();
+          const body = await request.json();
+          const id   = body.id || genId('evt');
+          validateEvent(body);
+          await env.DB.prepare(`
+            INSERT INTO events
+              (id, title, sub, type, status, date_start, date_end, time_start, time_end,
+               lieu, price, spots_total, spots_left, featured, is_grade, helloasso, helloasso_url)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(
+            id, body.title, body.sub, body.type,
+            body.status ?? 'disponible',
+            body.date_start, body.date_end ?? null,
+            body.time_start ?? null, body.time_end ?? null,
+            body.lieu, body.price ?? 0,
+            body.spots_total ?? 0, body.spots_left ?? body.spots_total ?? 0,
+            body.featured  ? 1 : 0, body.is_grade  ? 1 : 0,
+            body.helloasso ? 1 : 0, body.helloasso_url ?? null,
+          ).run();
+          const created = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(id).first();
+          return json(created, 201);
+        }
+
+        // PUT /api/events/:id [admin]
+        if (method === 'PUT' && resId) {
+          requireAdmin();
+          const body = await request.json();
+          validateEvent(body);
+          await env.DB.prepare(`
+            UPDATE events SET
+              title = ?, sub = ?, type = ?, status = ?,
+              date_start = ?, date_end = ?, time_start = ?, time_end = ?,
+              lieu = ?, price = ?, spots_total = ?, spots_left = ?,
+              featured = ?, is_grade = ?, helloasso = ?, helloasso_url = ?
+            WHERE id = ?
+          `).bind(
+            body.title, body.sub, body.type, body.status ?? 'disponible',
+            body.date_start, body.date_end ?? null,
+            body.time_start ?? null, body.time_end ?? null,
+            body.lieu, body.price ?? 0,
+            body.spots_total ?? 0, body.spots_left ?? body.spots_total ?? 0,
+            body.featured  ? 1 : 0, body.is_grade  ? 1 : 0,
+            body.helloasso ? 1 : 0, body.helloasso_url ?? null,
+            resId,
+          ).run();
+          const updated = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(resId).first();
+          if (!updated) return err('Événement introuvable', 404);
+          return json(updated);
+        }
+
+        // DELETE /api/events/:id [admin]
+        if (method === 'DELETE' && resId) {
+          requireAdmin();
+          const info = await env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(resId).run();
+          if (info.changes === 0) return err('Événement introuvable', 404);
+          return json({ deleted: resId });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  REGISTRATIONS
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'registrations') {
+
+        // GET /api/registrations [admin]
+        if (method === 'GET' && !resId) {
+          requireAdmin();
+          const eventFilter  = url.searchParams.get('event_id');
+          const statusFilter = url.searchParams.get('status');
+          let query  = `SELECT r.*, e.title as event_title FROM registrations r JOIN events e ON e.id = r.event_id WHERE 1=1`;
+          const params = [];
+          if (eventFilter)  { query += ` AND r.event_id = ?`;          params.push(eventFilter); }
+          if (statusFilter) { query += ` AND r.paiement_status = ?`;   params.push(statusFilter); }
+          query += ` ORDER BY r.created_at DESC`;
+          const stmt = env.DB.prepare(query);
+          const { results } = await (params.length ? stmt.bind(...params) : stmt).all();
+          return json(results);
+        }
+
+        // GET /api/registrations/:id [admin]
+        if (method === 'GET' && resId && !subRes) {
+          requireAdmin();
+          const reg = await env.DB.prepare(
+            `SELECT r.*, e.title as event_title, e.price as event_price
+             FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`
+          ).bind(resId).first();
+          if (!reg) return err('Inscription introuvable', 404);
+          return json(reg);
+        }
+
+        // POST /api/registrations [public]
+        if (method === 'POST' && !resId) {
+          const body = await request.json();
+          validateRegistration(body);
+          const ev = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
+          if (!ev)                    return err('Événement introuvable', 404);
+          if (ev.status === 'complet') return err('Événement complet', 409);
+          if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
+          const paiementStatus = ev.price === 0 ? 'gratuit' : 'en_attente';
+          const info = await env.DB.prepare(`
+            INSERT INTO registrations (
+              event_id, nom, prenom, date_naissance, telephone, email,
+              licence_ffk, is_mineur, categorie, niveau, regime,
+              ceinture_actuelle, ceinture_visee,
+              parent_nom, parent_prenom, parent_tel,
+              message, certif_medical, droit_image, reglement_ok,
+              montant, paiement_status, helloasso_ref
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(
+            body.event_id, body.nom, body.prenom, body.date_naissance,
+            body.telephone, body.email,
+            body.licence_ffk   ?? null, body.is_mineur ? 1 : 0,
+            body.categorie     ?? null, body.niveau ?? null, body.regime ?? null,
+            body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
+            body.parent_nom    ?? null, body.parent_prenom ?? null, body.parent_tel ?? null,
+            body.message       ?? null,
+            body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
+            ev.price, paiementStatus, body.helloasso_ref ?? null,
+          ).run();
+          return json({ id: info.meta.last_row_id, event_id: body.event_id, paiement_status: paiementStatus, montant: ev.price }, 201);
+        }
+
+        // PUT /api/registrations/:id/status [admin]
+        if (method === 'PUT' && resId && subRes === 'status') {
+          requireAdmin();
+          const body = await request.json();
+          const validStatuses = ['en_attente', 'paye', 'gratuit', 'annule'];
+          if (!validStatuses.includes(body.paiement_status)) {
+            return err(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
+          }
+          const info = await env.DB.prepare(`
+            UPDATE registrations SET paiement_status = ?, helloasso_ref = COALESCE(?, helloasso_ref) WHERE id = ?
+          `).bind(body.paiement_status, body.helloasso_ref ?? null, resId).run();
+          if (info.changes === 0) return err('Inscription introuvable', 404);
+          return json({ id: resId, paiement_status: body.paiement_status });
+        }
+
+        // DELETE /api/registrations/:id [admin]
+        if (method === 'DELETE' && resId) {
+          requireAdmin();
+          const info = await env.DB.prepare(`DELETE FROM registrations WHERE id = ?`).bind(resId).run();
+          if (info.changes === 0) return err('Inscription introuvable', 404);
+          return json({ deleted: Number(resId) });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  CHECKOUT HELLOASSO
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'checkout' && method === 'POST') {
+        const body = await request.json();
+        const { event_id, nom, prenom, email } = body;
+        if (!event_id || !nom || !prenom || !email) {
+          return err('Champs requis : event_id, nom, prenom, email');
+        }
+        const ev = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first();
+        if (!ev)                     return err('Evenement introuvable', 404);
+        if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
+        if (ev.status === 'complet') return err('Evenement complet', 409);
+        const baseUrl   = new URL(request.url).origin;
+        const returnUrl = baseUrl + '/?paiement=ok&event=' + event_id;
+        const errorUrl  = baseUrl + '/?paiement=erreur&event=' + event_id;
+        const redirectUrl = await createHelloAssoCheckout(env, { eventTitle: ev.title, amount: ev.price, email, prenom, nom, returnUrl, errorUrl });
+        return json({ redirectUrl });
+      }
+
+      // ── Route introuvable ─────────────────────────────────────
+      return err('Route introuvable', 404);
+
+    } catch (e) {
+      if (e instanceof ApiError) return err(e.message, e.status);
+      console.error(e);
+      return err('Erreur serveur interne', 500);
+    }
+  },
+};
