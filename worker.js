@@ -1258,12 +1258,6 @@ function showSuccess(){
 
   // ✅ 5. Notifications Brevo
   const d = { nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now };
-  if (CONFIG.BREVO_API_KEY) {
-    sendBrevoNotification(d);
-    if (email) sendConfirmationToParticipant(d);
-  }
-}
-
   if(CONFIG.BREVO_API_KEY){
     sendBrevoNotification(d);         // notification club
     if(email) sendConfirmationToParticipant(d); // confirmation participant
