@@ -1227,9 +1227,9 @@ function showSuccess(){
   };
 
   const emailSent = CONFIG.BREVO_API_KEY && email;
-  const emailMsg  = emailSent
-    ? `Un email de confirmation a été envoyé à <strong>${email}</strong>.`
-    : `Notez bien votre inscription. Aucun email de confirmation n'est configuré.`;
+  const emailMsg = emailSent
+    ? 'Un email de confirmation a ete envoye a <strong>' + email + '</strong>.'
+    : 'Notez bien votre inscription. Aucun email de confirmation n\'est configure.';
 
   // ✅ 3. Réécrire le DOM APRÈS avoir tout lu
   document.querySelector('.modal-body').innerHTML = `
