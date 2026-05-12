@@ -953,10 +953,63 @@ const CONFIG = {
   CLUB_EMAIL: 'fullfightingbons@gmail.com',
   CLUB_NAME: 'American Full Fighting Bons-en-Chablais',
 
-  // Mot de passe du panneau admin — CHANGEZ-LE !
-  ADMIN_PASSWORD: 'admin2025'
+  // URL de votre Cloudflare Worker
+  // Remplacez par votre domaine personnalisé une fois configuré :
+  API_URL: 'https://calendrier.americanfullfightingbons.fr'
+  API_URL: 'https://calendrier-americanfullfightingbons.fullfightingbons.workers.dev'
 };
 /* ════════════════════════════════════════════════════ */
+
+/* ── Client API Worker ─────────────────────────────── */
+const API = {
+  // Token admin saisi au moment du login — jamais stocké dans le code
+  _token: null,
+
+  async get(path) {
+    const r = await fetch(CONFIG.API_URL + path);
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async post(path, body) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async adminPost(path, body) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API._token },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async adminPut(path, body) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API._token },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async adminDelete(path) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + API._token }
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  }
+};
 
 const events={
   stage1:{title:'Stage Été — Frappe & Déplacement',sub:'Stage · 14–15 juin 2025 · Dojo du club',price:65,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/stage-ete-2025'},
@@ -1156,6 +1209,33 @@ function showSuccess(){
   document.querySelector('.modal-footer').style.display='none';
   document.getElementById('progress-fill').style.width='100%';
 
+  // Enregistrer l'inscription dans la base D1
+  const payload = {
+    event_id:        currentEvent.id,
+    nom:             document.getElementById('f-nom').value.trim().toUpperCase(),
+    prenom:          document.getElementById('f-prenom').value.trim(),
+    date_naissance:  document.getElementById('f-dob').value,
+    telephone:       tel,
+    email:           email,
+    licence_ffk:     licence||null,
+    is_mineur:       document.getElementById('f-mineur').checked,
+    categorie:       cat||null,
+    niveau:          niveau||null,
+    regime:          document.getElementById('f-regime').value||null,
+    ceinture_actuelle: currentEvent.isGrade ? document.getElementById('f-ceinture-actuelle').value||null : null,
+    ceinture_visee:    currentEvent.isGrade ? document.getElementById('f-ceinture-visee').value||null : null,
+    parent_nom:      document.getElementById('f-mineur').checked ? document.getElementById('f-parent-nom').value||null : null,
+    parent_prenom:   document.getElementById('f-mineur').checked ? document.getElementById('f-parent-prenom').value||null : null,
+    parent_tel:      document.getElementById('f-mineur').checked ? document.getElementById('f-parent-tel').value||null : null,
+    message:         message||null,
+    certif_medical:  document.getElementById('f-certif').checked,
+    droit_image:     document.getElementById('f-image').checked,
+    reglement_ok:    document.getElementById('f-reglement').checked
+  };
+  API.post('/api/registrations', payload)
+    .then(r => console.log('Inscription enregistrée en base, id:', r.id))
+    .catch(e => console.warn('Erreur enregistrement inscription D1:', e));
+
   const d={nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now};
   if(CONFIG.BREVO_API_KEY){
     sendBrevoNotification(d);         // notification club
@@ -1265,44 +1345,57 @@ document.getElementById('f-mineur').addEventListener('change',function(){
 /* ============================================================
    ADMIN — données & état
    ============================================================ */
-// Mot de passe lu depuis CONFIG (modifiable en haut du fichier)
-const ADMIN_PASSWORD = CONFIG.ADMIN_PASSWORD;
+// adminEvents est alimenté depuis l'API D1 au démarrage
+let adminEvents = [];
+let idCounter = 100;
+let pendingDeleteId = null;
 
-// Persistance localStorage — chargement des événements sauvegardés
-let adminEvents = loadAdminEvents();
-const DEFAULT_ADMIN_EVENTS = [
-  {id:'stage1',title:'Stage Été — Frappe & Déplacement',sub:'Tous niveaux · 2 jours intensifs',type:'stage',dateStart:'2025-06-14',dateEnd:'2025-06-15',timeStart:'09:00',timeEnd:'18:00',lieu:'Dojo du club, Bons-en-Chablais',price:65,spots:4,spotsTotal:20,status:'disponible',featured:true,isGrade:false,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/stage-ete-2025'},
-  {id:'compet1',title:'Tournoi Interne Printemps',sub:'Adhérents licenciés · Toutes catégories',type:'competition',dateStart:'2025-06-28',dateEnd:'',timeStart:'10:00',timeEnd:'17:00',lieu:'Gymnase intercommunal',price:0,spots:18,spotsTotal:18,status:'disponible',featured:false,isGrade:false,helloasso:false,helloasso_url:''},
-  {id:'stage2',title:'Stage Régional FFK',sub:'Ceintures oranges et plus · 1 jour',type:'stage',dateStart:'2025-07-12',dateEnd:'',timeStart:'09:00',timeEnd:'17:00',lieu:'Annecy (lieu précisé par mail)',price:40,spots:12,spotsTotal:12,status:'disponible',featured:false,isGrade:false,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/stage-ffk-2025'},
-  {id:'seminar1',title:'Séminaire Mental & Performance',sub:'Tous adhérents · Après-midi',type:'seminaire',dateStart:'2025-09-05',dateEnd:'',timeStart:'14:00',timeEnd:'18:00',lieu:'Dojo du club',price:20,spots:6,spotsTotal:20,status:'disponible',featured:false,isGrade:false,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/seminaire-mental'},
-  {id:'compet5',title:'Championnat Régional',sub:'Sélection club · Compétiteurs',type:'competition',dateStart:'2025-03-22',dateEnd:'',timeStart:'09:00',timeEnd:'17:00',lieu:'Lyon',price:25,spots:0,spotsTotal:20,status:'complet',featured:false,isGrade:false,helloasso:false,helloasso_url:''},
-  {id:'compet2',title:'Interclub Amical Été',sub:'Tous niveaux · Ambiance détendue',type:'competition',dateStart:'2025-07-19',dateEnd:'',timeStart:'10:00',timeEnd:'16:00',lieu:'Thonon-les-Bains',price:0,spots:30,spotsTotal:30,status:'disponible',featured:false,isGrade:false,helloasso:false,helloasso_url:''},
-  {id:'grade1',title:'Examens de Ceintures — Session Juin',sub:'Blanches → Oranges · Sur convocation',type:'grade',dateStart:'2025-06-21',dateEnd:'',timeStart:'10:00',timeEnd:'13:00',lieu:'Dojo du club, Bons-en-Chablais',price:15,spots:8,spotsTotal:15,status:'disponible',featured:false,isGrade:true,helloasso:true,helloasso_url:'https://www.helloasso.com/associations/american-full-fighting-bons-en-chablais/evenements/passage-grade-juin-2025'}
-];
-
-function loadAdminEvents(){
-  try{
-    const saved=localStorage.getItem('aff_admin_events');
-    if(saved) return JSON.parse(saved);
-  }catch(e){console.warn('Erreur lecture localStorage:',e);}
-  return JSON.parse(JSON.stringify(DEFAULT_ADMIN_EVENTS));
+/* ── Chargement initial des événements depuis le Worker ── */
+async function initPage() {
+  try {
+    const evts = await API.get('/api/events');
+    adminEvents = evts.map(normalizeEvent);
+    // Alimenter l'objet events utilisé par les modals d'inscription
+    adminEvents.forEach(ev => {
+      events[ev.id] = {
+        title: ev.title,
+        sub: buildSubText(ev),
+        price: ev.price,
+        helloasso: !!ev.helloasso,
+        helloasso_url: ev.helloasso_url || '',
+        isGrade: !!ev.is_grade
+      };
+    });
+    rebuildPublicPage();
+  } catch(e) {
+    console.error('Impossible de charger les événements:', e);
+  }
 }
 
-function saveAdminEventsToStorage(){
-  try{
-    localStorage.setItem('aff_admin_events',JSON.stringify(adminEvents));
-  }catch(e){console.warn('Erreur écriture localStorage:',e);}
+// Normalise les champs D1 (snake_case) vers le format interne (camelCase)
+function normalizeEvent(ev) {
+  return {
+    id:           ev.id,
+    title:        ev.title,
+    sub:          ev.sub,
+    type:         ev.type,
+    status:       ev.status,
+    dateStart:    ev.date_start,
+    dateEnd:      ev.date_end   || '',
+    timeStart:    ev.time_start || '',
+    timeEnd:      ev.time_end   || '',
+    lieu:         ev.lieu,
+    price:        ev.price,
+    spots:        ev.spots_left,
+    spotsTotal:   ev.spots_total,
+    featured:     !!ev.featured,
+    isGrade:      !!ev.is_grade,
+    helloasso:    !!ev.helloasso,
+    helloasso_url: ev.helloasso_url || ''
+  };
 }
 
-let idCounter=100;
-let pendingDeleteId=null;
-
-function resetAdminEvents(){
-  if(!confirm('Réinitialiser aux événements par défaut ? Toutes vos modifications seront perdues.')) return;
-  adminEvents=JSON.parse(JSON.stringify(DEFAULT_ADMIN_EVENTS));
-  saveAdminEventsToStorage();
-  renderAdminList();
-}
+document.addEventListener('DOMContentLoaded', initPage);
 
 /* -------- Login -------- */
 function openAdminLogin(){
@@ -1314,12 +1407,19 @@ function closeAdminLogin(){
   document.getElementById('admin-pw').value='';
   document.getElementById('login-error').style.display='none';
 }
-function checkAdminLogin(){
-  const pw=document.getElementById('admin-pw').value;
-  if(pw===ADMIN_PASSWORD){
+async function checkAdminLogin(){
+  const pw=document.getElementById('admin-pw').value.trim();
+  if(!pw) return;
+  // Vérifie le token contre l'API (tentative de GET protégé)
+  try {
+    API._token = pw;
+    await fetch(CONFIG.API_URL + '/api/registrations', {
+      headers: { 'Authorization': 'Bearer ' + pw }
+    }).then(r => { if (!r.ok) throw new Error('unauthorized'); });
     closeAdminLogin();
     openAdminPanel();
-  } else {
+  } catch(e) {
+    API._token = null;
     document.getElementById('login-error').style.display='block';
     document.getElementById('admin-pw').value='';
     document.getElementById('admin-pw').focus();
@@ -1332,7 +1432,7 @@ function renderConfigStatus(){
   if(!el) return;
   const issues=[];
   if(!CONFIG.BREVO_API_KEY) issues.push('Clé API Brevo non renseignée — les notifications email sont désactivées.');
-  if(CONFIG.ADMIN_PASSWORD==='admin2025') issues.push('Mot de passe admin par défaut (<code>admin2025</code>) — changez-le dans CONFIG.');
+  // Token admin vérifié côté serveur (Cloudflare Worker) — aucun mot de passe en clair ici.
   if(issues.length===0){
     el.innerHTML=`<div style="background:#EAFAF1;border:1px solid #A9DFBF;border-radius:8px;padding:10px 16px;font-size:13px;color:#1E8449;display:flex;align-items:center;gap:8px">✅ <span>Configuration OK — email Brevo actif.</span></div>`;
   } else {
@@ -1452,7 +1552,7 @@ function toggleHAUrl(){
   document.getElementById('ae-ha-url-group').style.display=document.getElementById('ae-helloasso').checked?'block':'none';
 }
 
-function saveEvent(){
+async function saveEvent(){
   const title=document.getElementById('ae-title').value.trim();
   const sub=document.getElementById('ae-sub').value.trim();
   const dateStart=document.getElementById('ae-date-start').value;
@@ -1461,35 +1561,48 @@ function saveEvent(){
   const spotsVal=document.getElementById('ae-spots').value;
   const typeBtn=document.querySelector('#ae-type-group .admin-toggle-btn.active');
   if(!title||!sub||!dateStart||!lieu||priceVal===''||spotsVal===''){
-    alert('Veuillez remplir tous les champs obligatoires (marqués d\'un *).');return;
+    alert('Veuillez remplir tous les champs obligatoires (marqués d\'un *).'); return;
   }
-  if(!typeBtn){alert('Veuillez sélectionner un type d\'événement.');return;}
+  if(!typeBtn){alert('Veuillez sélectionner un type d\'événement.'); return;}
 
   const statusBtn=document.querySelector('#ae-status-group .admin-toggle-btn.active');
-  const id=document.getElementById('ae-id').value||('evt'+(++idCounter));
-  const ev={
-    id,title,sub,
-    type:typeBtn.dataset.val,
-    dateStart,
-    dateEnd:document.getElementById('ae-date-end').value||'',
-    timeStart:document.getElementById('ae-time-start').value||'',
-    timeEnd:document.getElementById('ae-time-end').value||'',
+  const existingId=document.getElementById('ae-id').value;
+  const spotsInt=parseInt(spotsVal)||0;
+
+  const payload={
+    title, sub,
+    type: typeBtn.dataset.val,
+    date_start:  dateStart,
+    date_end:    document.getElementById('ae-date-end').value||null,
+    time_start:  document.getElementById('ae-time-start').value||null,
+    time_end:    document.getElementById('ae-time-end').value||null,
     lieu,
-    price:parseFloat(priceVal)||0,
-    spots:parseInt(spotsVal)||0,
-    spotsTotal:parseInt(spotsVal)||0,
-    status:statusBtn?statusBtn.dataset.val:'disponible',
-    featured:document.getElementById('ae-featured').checked,
-    isGrade:document.getElementById('ae-isGrade').checked,
-    helloasso:document.getElementById('ae-helloasso').checked,
-    helloasso_url:document.getElementById('ae-helloasso-url').value.trim()
+    price:       parseFloat(priceVal)||0,
+    spots_total: spotsInt,
+    spots_left:  existingId ? undefined : spotsInt,
+    status:      statusBtn?statusBtn.dataset.val:'disponible',
+    featured:    document.getElementById('ae-featured').checked,
+    is_grade:    document.getElementById('ae-isGrade').checked,
+    helloasso:   document.getElementById('ae-helloasso').checked,
+    helloasso_url: document.getElementById('ae-helloasso-url').value.trim()||null
   };
-  const idx=adminEvents.findIndex(e=>e.id===id);
-  if(idx>=0) adminEvents[idx]=ev;
-  else adminEvents.push(ev);
-  saveAdminEventsToStorage();
-  closeEventForm();
-  renderAdminList();
+
+  try {
+    let saved;
+    if(existingId){
+      saved = await API.adminPut('/api/events/' + existingId, payload);
+    } else {
+      saved = await API.adminPost('/api/events', payload);
+    }
+    const norm = normalizeEvent(saved);
+    const idx = adminEvents.findIndex(e=>e.id===norm.id);
+    if(idx>=0) adminEvents[idx]=norm; else adminEvents.push(norm);
+    events[norm.id]={title:norm.title,sub:buildSubText(norm),price:norm.price,helloasso:norm.helloasso,helloasso_url:norm.helloasso_url,isGrade:norm.isGrade};
+    closeEventForm();
+    renderAdminList();
+  } catch(e) {
+    alert('Erreur lors de la sauvegarde : ' + e.message);
+  }
 }
 
 /* -------- Delete -------- */
@@ -1501,13 +1614,20 @@ function askDelete(id){
   document.getElementById('confirm-overlay').classList.add('open');
   document.getElementById('confirm-yes-btn').onclick=()=>doDelete();
 }
-function doDelete(){
+async function doDelete(){
   if(!pendingDeleteId) return;
-  adminEvents=adminEvents.filter(e=>e.id!==pendingDeleteId);
-  pendingDeleteId=null;
-  saveAdminEventsToStorage();
-  closeConfirm();
-  renderAdminList();
+  try {
+    await API.adminDelete('/api/events/' + pendingDeleteId);
+    adminEvents=adminEvents.filter(e=>e.id!==pendingDeleteId);
+    delete events[pendingDeleteId];
+    pendingDeleteId=null;
+    closeConfirm();
+    renderAdminList();
+    rebuildPublicPage();
+  } catch(e) {
+    alert('Erreur lors de la suppression : ' + e.message);
+    closeConfirm();
+  }
 }
 function closeConfirm(){
   document.getElementById('confirm-overlay').classList.remove('open');
