@@ -1262,23 +1262,6 @@ function showSuccess(){
   }
 }
 
-  document.querySelector('.modal-body').innerHTML=\`
-    <div class="success-screen">
-      <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
-      <div class="success-title">INSCRIPTION VALIDÉE</div>
-      <p class="success-sub">Votre inscription à <strong>\${currentEvent.title}</strong> a bien été enregistrée. \${emailMsg}</p>
-      <div class="recap-card">
-        <div class="recap-row"><span class="recap-label">Participant</span><span>\${nom} \${prenom}</span></div>
-        <div class="recap-row"><span class="recap-label">Événement</span><span>\${currentEvent.title}</span></div>
-        <div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">\${prix}</span></div>
-        <div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>
-      </div>
-      <button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>
-    </div>
-  \`;
-  document.querySelector('.modal-footer').style.display='none';
-  document.getElementById('progress-fill').style.width='100%';
-
   // Enregistrer l'inscription dans la base D1
   const payload = {
     event_id:        currentEvent.id,
