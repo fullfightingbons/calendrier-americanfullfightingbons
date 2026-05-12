@@ -1232,20 +1232,19 @@ function showSuccess(){
     : 'Notez bien votre inscription. Aucun email de confirmation n\'est configure.';
 
   // ✅ 3. Réécrire le DOM APRÈS avoir tout lu
-  document.querySelector('.modal-body').innerHTML = `
-    <div class="success-screen">
-      <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
-      <div class="success-title">INSCRIPTION VALIDÉE</div>
-      <p class="success-sub">Votre inscription à <strong>${currentEvent.title}</strong> a bien été enregistrée. ${emailMsg}</p>
-      <div class="recap-card">
-        <div class="recap-row"><span class="recap-label">Participant</span><span>${nom} ${prenom}</span></div>
-        <div class="recap-row"><span class="recap-label">Événement</span><span>${currentEvent.title}</span></div>
-        <div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">${prix}</span></div>
-        <div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>
-      </div>
-      <button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>
-    </div>
-  `;
+ document.querySelector('.modal-body').innerHTML =
+    '<div class="success-screen">' +
+      '<div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+      '<div class="success-title">INSCRIPTION VALID\u00c9E</div>' +
+      '<p class="success-sub">Votre inscription \u00e0 <strong>' + currentEvent.title + '</strong> a bien \u00e9t\u00e9 enregistr\u00e9e. ' + emailMsg + '</p>' +
+      '<div class="recap-card">' +
+        '<div class="recap-row"><span class="recap-label">Participant</span><span>' + nom + ' ' + prenom + '</span></div>' +
+        '<div class="recap-row"><span class="recap-label">\u00c9v\u00e9nement</span><span>' + currentEvent.title + '</span></div>' +
+        '<div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">' + prix + '</span></div>' +
+        '<div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">\u2713 Confirm\u00e9</span></div>' +
+      '</div>' +
+      '<button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>' +
+    '</div>';
   document.querySelector('.modal-footer').style.display = 'none';
   document.getElementById('progress-fill').style.width = '100%';
 
