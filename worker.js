@@ -1221,7 +1221,6 @@ function showSuccess(){
     regime:            document.getElementById('f-regime').value || null,
     ceinture_actuelle: currentEvent.isGrade ? (document.getElementById('f-ceinture-actuelle').value || null) : null,
     ceinture_visee:    currentEvent.isGrade ? (document.getElementById('f-ceinture-visee').value || null) : null,
-    parent_nom:        isMineur ? (document.getElementById('f-parent-nom').value || null) : null,
     parent_prenom:     isMineur ? (document.getElementById('f-parent-prenom').value || null) : null,
     parent_tel:        isMineur ? (document.getElementById('f-parent-tel').value || null) : null,
     message:           message !== '-' ? message : null,
