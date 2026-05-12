@@ -1196,12 +1196,12 @@ function showSuccess(){
   const nom        = (document.getElementById('f-nom').value || '').trim().toUpperCase();
   const prenom     = document.getElementById('f-prenom').value.trim() || '';
   const email      = document.getElementById('f-email').value.trim() || '';
-  const tel        = document.getElementById('f-tel').value.trim() || '—';
-  const dob        = document.getElementById('f-dob').value || '—';
+  const tel        = document.getElementById('f-tel').value.trim() || '-';
+  const dob        = document.getElementById('f-dob').value || '-';
   const cat        = document.getElementById('f-categorie').value || 'Non renseigné';
   const niveau     = document.getElementById('f-niveau').value || 'Non renseigné';
-  const licence    = document.getElementById('f-licence').value || '—';
-  const message    = document.getElementById('f-message').value || '—';
+  const licence    = document.getElementById('f-licence').value || '-';
+  const message    = document.getElementById('f-message').value || '-';
   const isMineur   = document.getElementById('f-mineur').checked;
   const prix       = currentEvent.price === 0 ? 'Gratuit' : '€' + currentEvent.price;
   const now        = new Date().toLocaleString('fr-FR');
@@ -1214,7 +1214,7 @@ function showSuccess(){
     date_naissance:    dob,
     telephone:         tel,
     email:             email,
-    licence_ffk:       licence !== '—' ? licence : null,
+    licence_ffk:       licence !== '-' ? licence : null,
     is_mineur:         isMineur,
     categorie:         cat || null,
     niveau:            niveau || null,
@@ -1224,7 +1224,7 @@ function showSuccess(){
     parent_nom:        isMineur ? (document.getElementById('f-parent-nom').value || null) : null,
     parent_prenom:     isMineur ? (document.getElementById('f-parent-prenom').value || null) : null,
     parent_tel:        isMineur ? (document.getElementById('f-parent-tel').value || null) : null,
-    message:           message !== '—' ? message : null,
+    message:           message !== '-' ? message : null,
     certif_medical:    document.getElementById('f-certif').checked,
     droit_image:       document.getElementById('f-image').checked,
     reglement_ok:      document.getElementById('f-reglement').checked
