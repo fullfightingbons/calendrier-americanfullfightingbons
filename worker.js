@@ -1051,13 +1051,13 @@ function filterCards(type,btn){
 }
 
 function openModal(eventId){
-  currentEvent=events[eventId];
-  currentStep=1;
-  document.getElementById('modal-title').textContent=currentEvent.title;
-  document.getElementById('modal-sub').textContent=currentEvent.sub;
+  currentEvent = { ...events[eventId], id: eventId }; // ✅ id injecté
+  currentStep = 1;
+  document.getElementById('modal-title').textContent = currentEvent.title;
+  document.getElementById('modal-sub').textContent = currentEvent.sub;
   updateStepUI();
   document.getElementById('modal-overlay').classList.add('open');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
 
 function closeModal(){
@@ -1188,22 +1188,79 @@ function goToHelloAsso(){
 }
 
 function showSuccess(){
-  const nom=(document.getElementById('f-nom').value||'').toUpperCase();
-  const prenom=document.getElementById('f-prenom').value||'';
-  const email=document.getElementById('f-email').value||'';
-  const tel=document.getElementById('f-tel').value||'—';
-  const dob=document.getElementById('f-dob').value||'—';
-  const cat=document.getElementById('f-categorie').value||'Non renseigné';
-  const niveau=document.getElementById('f-niveau').value||'Non renseigné';
-  const licence=document.getElementById('f-licence').value||'—';
-  const message=document.getElementById('f-message').value||'—';
-  const prix=currentEvent.price===0?'Gratuit':'€'+currentEvent.price;
-  const now=new Date().toLocaleString('fr-FR');
+  // ✅ 1. Lire TOUTES les valeurs avant de toucher au DOM
+  const nom        = (document.getElementById('f-nom').value || '').trim().toUpperCase();
+  const prenom     = document.getElementById('f-prenom').value.trim() || '';
+  const email      = document.getElementById('f-email').value.trim() || '';
+  const tel        = document.getElementById('f-tel').value.trim() || '—';
+  const dob        = document.getElementById('f-dob').value || '—';
+  const cat        = document.getElementById('f-categorie').value || 'Non renseigné';
+  const niveau     = document.getElementById('f-niveau').value || 'Non renseigné';
+  const licence    = document.getElementById('f-licence').value || '—';
+  const message    = document.getElementById('f-message').value || '—';
+  const isMineur   = document.getElementById('f-mineur').checked;
+  const prix       = currentEvent.price === 0 ? 'Gratuit' : '€' + currentEvent.price;
+  const now        = new Date().toLocaleString('fr-FR');
+
+  // ✅ 2. Construire le payload AVANT d'écraser le DOM
+  const payload = {
+    event_id:          currentEvent.id,
+    nom:               nom,
+    prenom:            prenom,
+    date_naissance:    dob,
+    telephone:         tel,
+    email:             email,
+    licence_ffk:       licence !== '—' ? licence : null,
+    is_mineur:         isMineur,
+    categorie:         cat || null,
+    niveau:            niveau || null,
+    regime:            document.getElementById('f-regime').value || null,
+    ceinture_actuelle: currentEvent.isGrade ? (document.getElementById('f-ceinture-actuelle').value || null) : null,
+    ceinture_visee:    currentEvent.isGrade ? (document.getElementById('f-ceinture-visee').value || null) : null,
+    parent_nom:        isMineur ? (document.getElementById('f-parent-nom').value || null) : null,
+    parent_prenom:     isMineur ? (document.getElementById('f-parent-prenom').value || null) : null,
+    parent_tel:        isMineur ? (document.getElementById('f-parent-tel').value || null) : null,
+    message:           message !== '—' ? message : null,
+    certif_medical:    document.getElementById('f-certif').checked,
+    droit_image:       document.getElementById('f-image').checked,
+    reglement_ok:      document.getElementById('f-reglement').checked
+  };
 
   const emailSent = CONFIG.BREVO_API_KEY && email;
-  const emailMsg = emailSent
-    ? \`Un email de confirmation a été envoyé à <strong>\${email}</strong>.\`
-    : \`Notez bien votre inscription. Aucun email de confirmation n'est configuré.\`;
+  const emailMsg  = emailSent
+    ? `Un email de confirmation a été envoyé à <strong>${email}</strong>.`
+    : `Notez bien votre inscription. Aucun email de confirmation n'est configuré.`;
+
+  // ✅ 3. Réécrire le DOM APRÈS avoir tout lu
+  document.querySelector('.modal-body').innerHTML = `
+    <div class="success-screen">
+      <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="success-title">INSCRIPTION VALIDÉE</div>
+      <p class="success-sub">Votre inscription à <strong>${currentEvent.title}</strong> a bien été enregistrée. ${emailMsg}</p>
+      <div class="recap-card">
+        <div class="recap-row"><span class="recap-label">Participant</span><span>${nom} ${prenom}</span></div>
+        <div class="recap-row"><span class="recap-label">Événement</span><span>${currentEvent.title}</span></div>
+        <div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">${prix}</span></div>
+        <div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>
+      </div>
+      <button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>
+    </div>
+  `;
+  document.querySelector('.modal-footer').style.display = 'none';
+  document.getElementById('progress-fill').style.width = '100%';
+
+  // ✅ 4. Envoyer en base D1
+  API.post('/api/registrations', payload)
+    .then(r => console.log('Inscription enregistrée en base, id:', r.id))
+    .catch(e => console.warn('Erreur enregistrement inscription D1:', e));
+
+  // ✅ 5. Notifications Brevo
+  const d = { nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now };
+  if (CONFIG.BREVO_API_KEY) {
+    sendBrevoNotification(d);
+    if (email) sendConfirmationToParticipant(d);
+  }
+}
 
   document.querySelector('.modal-body').innerHTML=\`
     <div class="success-screen">
