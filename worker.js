@@ -2080,13 +2080,35 @@ export default {
       }
 // CHECKOUT HELLOASSO
       if (resource === 'checkout' && method === 'POST') {
-        // ... (le code de la partie 2)
+        const body = await request.json();
+        const { event_id, nom, prenom, email } = body;
+        if (!event_id || !nom || !prenom || !email) {
+          return err('Champs requis : event_id, nom, prenom, email');
+        }
+
+        const ev = await env.DB.prepare(
+          'SELECT * FROM events WHERE id = ?'
+        ).bind(event_id).first();
+        if (!ev)              return err('Evenement introuvable', 404);
+        if (ev.price === 0)   return err('Evenement gratuit, pas de checkout', 400);
+        if (ev.status === 'complet') return err('Evenement complet', 409);
+
+        const baseUrl   = new URL(request.url).origin;
+        const returnUrl = baseUrl + '/?paiement=ok&event=' + event_id;
+        const errorUrl  = baseUrl + '/?paiement=erreur&event=' + event_id;
+
+        const redirectUrl = await createHelloAssoCheckout(env, {
+          eventTitle: ev.title,
+          amount:     ev.price,
+          email, prenom, nom,
+          returnUrl, errorUrl,
+        });
+
+        return json({ redirectUrl });
       }
 
       return err('Route introuvable', 404);  // ← cette ligne reste en dernier
       
-      return err('Route introuvable', 404);
-
     } catch (e) {
       if (e instanceof ApiError) return err(e.message, e.status);
       console.error(e);
