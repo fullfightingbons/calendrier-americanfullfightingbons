@@ -1740,7 +1740,7 @@ export default {
     }
 
     // ── CORS ─────────────────────────────────────────────────
-    const corsHeaders    const corsHeaders = {
+    const corsHeaders = {
       'Access-Control-Allow-Origin':  '*',   // restreignez à votre domaine en prod
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
