@@ -1,59 +1,188 @@
-# Worker + D1 Database
+# 🥊 AFF Bons-en-Chablais — Déploiement GitHub → Cloudflare
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/d1-template)
+Déploiement automatique du Worker et de la base D1 via GitHub Actions.
 
-![Worker + D1 Template Preview](https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/cb7cb0a9-6102-4822-633c-b76b7bb25900/public)
+---
 
-<!-- dash-content-start -->
-
-D1 is Cloudflare's native serverless SQL database ([docs](https://developers.cloudflare.com/d1/)). This project demonstrates using a Worker with a D1 binding to execute a SQL statement. A simple frontend displays the result of this query:
-
-```SQL
-SELECT * FROM comments LIMIT 3;
-```
-
-The D1 database is initialized with a `comments` table and this data:
-
-```SQL
-INSERT INTO comments (author, content)
-VALUES
-    ('Kristian', 'Congrats!'),
-    ('Serena', 'Great job!'),
-    ('Max', 'Keep up the good work!')
-;
-```
-
-> [!IMPORTANT]
-> When using C3 to create this project, select "no" when it asks if you want to deploy. You need to follow this project's [setup steps](https://github.com/cloudflare/templates/tree/main/d1-template#setup-steps) before deploying.
-
-<!-- dash-content-end -->
-
-## Getting Started
-
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
+## Structure du dépôt
 
 ```
-npm create cloudflare@latest -- --template=cloudflare/templates/d1-template
+votre-repo/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml      ← pipeline CI/CD
+├── worker.js               ← API Cloudflare Worker
+├── schema.sql              ← schéma base D1 (+ données démo)
+├── wrangler.toml           ← configuration Cloudflare
+└── index.html              ← votre front-end (peut rester statique)
 ```
 
-A live public deployment of this template is available at [https://d1-template.templates.workers.dev](https://d1-template.templates.workers.dev)
+---
 
-## Setup Steps
+## Étape 1 — Créer la base D1
 
-1. Install the project dependencies with a package manager of your choice:
-   ```bash
-   npm install
-   ```
-2. Create a [D1 database](https://developers.cloudflare.com/d1/get-started/) with the name "d1-template-database":
-   ```bash
-   npx wrangler d1 create d1-template-database
-   ```
-   ...and update the `database_id` field in `wrangler.json` with the new database ID.
-3. Run the following db migration to initialize the database (notice the `migrations` directory in this project):
-   ```bash
-   npx wrangler d1 migrations apply --remote d1-template-database
-   ```
-4. Deploy the project!
-   ```bash
-   npx wrangler deploy
-   ```
+En local (une seule fois) :
+
+```bash
+npm install -g wrangler
+wrangler login
+
+wrangler d1 create calendrier-americanfullfightingbonsdb
+```
+
+Copiez l'**`id`** affiché et collez-le dans `wrangler.toml` :
+
+```toml
+[[d1_databases]]
+database_id = "VOTRE_ID_ICI"
+```
+
+Committez `wrangler.toml` mis à jour dans votre dépôt GitHub.
+
+---
+
+## Étape 2 — Ajouter les 3 secrets GitHub
+
+Dans votre dépôt GitHub : **Settings → Secrets and variables → Actions → New repository secret**
+
+| Nom du secret | Valeur | Où la trouver |
+|---|---|---|
+| `CF_API_TOKEN` | Token API Cloudflare | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → *Edit Cloudflare Workers* |
+| `CF_ACCOUNT_ID` | ID de votre compte | Cloudflare Dashboard → barre latérale droite |
+| `CF_ADMIN_TOKEN` | Mot de passe admin de votre choix | Inventez-en un fort, ex: `AFF-Admin-2025!` |
+
+> ⚠️ Le token API doit avoir les permissions :
+> **Workers Scripts:Edit**, **D1:Edit**, **Account Settings:Read**
+
+---
+
+## Étape 3 — Premier déploiement
+
+Poussez vos fichiers sur la branche `main` :
+
+```bash
+git add worker.js schema.sql wrangler.toml .github/
+git commit -m "feat: ajout Worker + D1 + CI/CD"
+git push origin main
+```
+
+GitHub Actions va automatiquement :
+1. Appliquer `schema.sql` sur la base D1 (migration)
+2. Déployer le Worker sur Cloudflare
+3. Injecter `CF_ADMIN_TOKEN` comme secret du Worker
+
+Suivez l'avancement dans l'onglet **Actions** de votre dépôt GitHub.
+
+---
+
+## Étape 4 — Configurer le domaine personnalisé
+
+Une fois le Worker déployé, rendez-vous sur :
+
+**Cloudflare Dashboard → Workers & Pages → calendrier-americanfullfightingbons → Settings → Triggers → Add Custom Domain**
+
+Ajoutez : `calendrier.americanfullfightingbons.fr`
+
+> Le sous-domaine doit être sur une zone DNS gérée par Cloudflare.
+> Cloudflare configurera automatiquement le certificat SSL.
+
+Ensuite, décommentez les lignes `routes` dans `wrangler.toml` et adaptez le domaine :
+
+```toml
+routes = [
+  { pattern = "calendrier.americanfullfightingbons.fr/*", zone_name = "americanfullfightingbons.fr" }
+]
+```
+
+---
+
+## Étape 5 — Connecter index.html à l'API
+
+Dans votre `index.html`, définissez l'URL de base de l'API :
+
+```javascript
+const API = 'https://calendrier.americanfullfightingbons.fr';
+// ou pendant les tests :
+// const API = 'https://calendrier-americanfullfightingbons.VOTRE-COMPTE.workers.dev';
+```
+
+### Charger les événements au démarrage
+
+```javascript
+async function loadEvents() {
+  const res  = await fetch(`${API}/api/events`);
+  adminEvents = await res.json();
+  rebuildPublicPage();
+}
+document.addEventListener('DOMContentLoaded', loadEvents);
+```
+
+### Soumettre une inscription
+
+```javascript
+async function submitRegistration(payload) {
+  const res = await fetch(`${API}/api/registrations`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const e = await res.json();
+    throw new Error(e.error);
+  }
+  return res.json();
+}
+```
+
+### Sauvegarder un événement (admin)
+
+```javascript
+const ADMIN_TOKEN = sessionStorage.getItem('admin_token');
+
+async function saveEventToAPI(ev) {
+  const isNew = !ev.id;
+  const url   = isNew ? `${API}/api/events` : `${API}/api/events/${ev.id}`;
+  const res   = await fetch(url, {
+    method:  isNew ? 'POST' : 'PUT',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${ADMIN_TOKEN}`,
+    },
+    body: JSON.stringify(ev),
+  });
+  if (!res.ok) throw new Error((await res.json()).error);
+  return res.json();
+}
+
+async function deleteEventFromAPI(id) {
+  await fetch(`${API}/api/events/${id}`, {
+    method:  'DELETE',
+    headers: { 'Authorization': `Bearer ${ADMIN_TOKEN}` },
+  });
+}
+```
+
+---
+
+## Déploiements suivants
+
+Chaque `git push` sur `main` redéploie automatiquement le Worker et réapplique le schéma SQL. Les `INSERT OR IGNORE` dans `schema.sql` protègent les données existantes.
+
+---
+
+## Référence des routes API
+
+| Méthode | Route | Auth | Description |
+|---------|-------|------|-------------|
+| GET | `/api/events` | — | Liste tous les événements |
+| GET | `/api/events/:id` | — | Détail + nombre d'inscrits |
+| POST | `/api/events` | ✅ | Créer un événement |
+| PUT | `/api/events/:id` | ✅ | Modifier un événement |
+| DELETE | `/api/events/:id` | ✅ | Supprimer un événement |
+| POST | `/api/registrations` | — | Créer une inscription |
+| GET | `/api/registrations` | ✅ | Lister les inscriptions |
+| GET | `/api/registrations/:id` | ✅ | Détail d'une inscription |
+| PUT | `/api/registrations/:id/status` | ✅ | Changer le statut de paiement |
+| DELETE | `/api/registrations/:id` | ✅ | Supprimer une inscription |
+
+✅ = Header requis : `Authorization: Bearer <CF_ADMIN_TOKEN>`

@@ -1,0 +1,22 @@
+name                   = "calendrier-americanfullfightingbons"
+main                   = "worker.js"
+compatibility_date     = "2024-01-01"
+compatibility_flags    = ["nodejs_compat"]
+
+# ── Domaine personnalisé (décommentez après avoir ajouté la route dans Cloudflare) ──
+# routes = [
+#   { pattern = "calendrier.americanfullfightingbons.fr/*", zone_name = "americanfullfightingbons.fr" }
+# ]
+
+# ── Base de données D1 ───────────────────────────────────────────────────────────────
+[[d1_databases]]
+binding       = "DB"
+database_name = "calendrier-americanfullfightingbonsdb"
+database_id   = "b146bb47-b1cc-48db-9e7c-0c8223a9fee2"   # ← wrangler d1 create calendrier-americanfullfightingbonsdb
+
+# ── Variables d'environnement non-sensibles ──────────────────────────────────────────
+[vars]
+ENVIRONMENT = "production"
+
+# ── Secrets (définis via GitHub Secrets, jamais ici) ────────────────────────────────
+# ADMIN_TOKEN  → wrangler secret put ADMIN_TOKEN  (ou GitHub Secret CF_ADMIN_TOKEN)
