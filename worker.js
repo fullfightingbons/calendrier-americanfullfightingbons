@@ -1265,34 +1265,6 @@ function showSuccess(){
   }
 }
 
-  // Enregistrer l'inscription dans la base D1
-  const payload = {
-    event_id:        currentEvent.id,
-    nom:             document.getElementById('f-nom').value.trim().toUpperCase(),
-    prenom:          document.getElementById('f-prenom').value.trim(),
-    date_naissance:  document.getElementById('f-dob').value,
-    telephone:       tel,
-    email:           email,
-    licence_ffk:     licence||null,
-    is_mineur:       document.getElementById('f-mineur').checked,
-    categorie:       cat||null,
-    niveau:          niveau||null,
-    regime:          document.getElementById('f-regime').value||null,
-    ceinture_actuelle: currentEvent.isGrade ? document.getElementById('f-ceinture-actuelle').value||null : null,
-    ceinture_visee:    currentEvent.isGrade ? document.getElementById('f-ceinture-visee').value||null : null,
-    parent_nom:      document.getElementById('f-mineur').checked ? document.getElementById('f-parent-nom').value||null : null,
-    parent_prenom:   document.getElementById('f-mineur').checked ? document.getElementById('f-parent-prenom').value||null : null,
-    parent_tel:      document.getElementById('f-mineur').checked ? document.getElementById('f-parent-tel').value||null : null,
-    message:         message||null,
-    certif_medical:  document.getElementById('f-certif').checked,
-    droit_image:     document.getElementById('f-image').checked,
-    reglement_ok:    document.getElementById('f-reglement').checked
-  };
-  API.post('/api/registrations', payload)
-    .then(r => console.log('Inscription enregistrée en base, id:', r.id))
-    .catch(e => console.warn('Erreur enregistrement inscription D1:', e));
-
-  const d={nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now};
   if(CONFIG.BREVO_API_KEY){
     sendBrevoNotification(d);         // notification club
     if(email) sendConfirmationToParticipant(d); // confirmation participant
