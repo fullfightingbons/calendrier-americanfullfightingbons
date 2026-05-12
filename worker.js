@@ -1127,19 +1127,23 @@ function setupPaymentStep(){
   btnNext.textContent=isFree?'Confirmer l\\'inscription ✓':'Confirmer l\\'inscription ✓';
 }
 
-function openHelloAsso(){
-  const url=currentEvent.helloasso_url||'https://www.helloasso.com';
-  // Pré-remplissage via paramètres URL supportés par HelloAsso
-  const email=document.getElementById('f-email').value||'';
-  const prenom=document.getElementById('f-prenom').value||'';
-  const nom=(document.getElementById('f-nom').value||'').toUpperCase();
-  const params=new URLSearchParams();
-  if(email) params.set('email',email);
-  if(prenom) params.set('firstName',prenom);
-  if(nom) params.set('lastName',nom);
-  const sep=url.includes('?')?'&':'?';
-  const fullUrl=params.toString()?url+sep+params.toString():url;
-  window.open(fullUrl,'_blank','noopener');
+async function openHelloAsso() {
+  const btn = document.getElementById('btn-open-helloasso');
+  btn.disabled = true;
+  btn.textContent = 'Redirection en cours...';
+  try {
+    const result = await API.post('/api/checkout', {
+      event_id: currentEvent.id,
+      nom:      (document.getElementById('f-nom').value || '').toUpperCase(),
+      prenom:   document.getElementById('f-prenom').value,
+      email:    document.getElementById('f-email').value,
+    });
+    window.location.href = result.redirectUrl;
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Payer sur HelloAsso';
+    alert('Erreur lors de la création du paiement : ' + e.message);
+  }
 }
 
 function validateStep(){
