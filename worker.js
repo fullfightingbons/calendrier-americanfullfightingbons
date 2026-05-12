@@ -1761,6 +1761,58 @@ function buildCard(ev){
 </html>
 `;
 
+// ── HelloAsso OAuth2 — obtenir un token ──────────────────────
+async function getHelloAssoToken(env) {
+  const resp = await fetch('https://api.helloasso.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'client_credentials',
+      client_id:     env.HELLOASSO_CLIENT_ID,
+      client_secret: env.HELLOASSO_CLIENT_SECRET,
+    })
+  });
+  if (!resp.ok) throw new ApiError('Erreur authentification HelloAsso', 502);
+  const data = await resp.json();
+  return data.access_token;
+}
+
+// ── HelloAsso — créer une session Checkout ───────────────────
+async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom, nom, returnUrl, errorUrl }) {
+  const token = await getHelloAssoToken(env);
+  const resp = await fetch(
+    `https://api.helloasso.com/v5/organizations/${env.HELLOASSO_ORG_SLUG}/checkout-intents`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        totalAmount:        amount * 100, // en centimes
+        initialAmount:      amount * 100,
+        itemName:           eventTitle,
+        backUrl:            errorUrl,
+        errorUrl:           errorUrl,
+        returnUrl:          returnUrl,
+        containsDonation:   false,
+        payer: {
+          email,
+          firstName: prenom,
+          lastName:  nom,
+        }
+      })
+    }
+  );
+  if (!resp.ok) {
+    const e = await resp.json();
+    console.error('HelloAsso checkout error:', e);
+    throw new ApiError('Erreur création checkout HelloAsso', 502);
+  }
+  const data = await resp.json();
+  return data.redirectUrl; // URL vers laquelle rediriger l'utilisateur
+}
+
 export default {
   async fetch(request, env) {
     const url    = new URL(request.url);
