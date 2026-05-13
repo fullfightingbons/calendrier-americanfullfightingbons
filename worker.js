@@ -1510,22 +1510,8 @@ export default {
         if (!ev)                     return err('Evenement introuvable', 404);
         if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
         if (ev.status === 'complet') return err('Evenement complet', 409);
-
-        // ── DEBUG TEMPORAIRE ───────────────────────────────────
-        return json({
-          debug: true,
-          env_check: {
-            has_client_id:     !!env.HELLOASSO_CLIENT_ID,
-            has_client_secret: !!env.HELLOASSO_CLIENT_SECRET,
-            has_org_slug:      !!env.HELLOASSO_ORG_SLUG,
-            org_slug:          env.HELLOASSO_ORG_SLUG,
-            client_id_prefix:  env.HELLOASSO_CLIENT_ID?.slice(0, 6) + '…',
-          },
-          ev_title: ev.title,
-          ev_price: ev.price,
-        });
-        // ── FIN DEBUG ──────────────────────────────────────────
       }
+
       // ── Route introuvable ─────────────────────────────────────
       return err('Route introuvable', 404);
 
