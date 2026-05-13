@@ -248,6 +248,30 @@ footer span{color:#888}
 .spots-low{background:#FEF9E7;color:#B7770D}
 .spots-full{background:#f5f5f5;color:#999}
 
+/* ADMIN TABS */
+.admin-tabs{display:flex;gap:4px;margin-bottom:2rem;border-bottom:2px solid var(--border)}
+.admin-tab{font-family:var(--font-body);font-size:14px;font-weight:500;padding:10px 20px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.admin-tab.active{color:var(--red);border-bottom-color:var(--red);font-weight:600}
+.admin-tab:hover:not(.active){color:var(--dark)}
+.admin-tab-content{display:none}.admin-tab-content.active{display:block}
+
+/* ADMIN REGISTRATIONS */
+.admin-reg-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
+.admin-reg-select{font-family:var(--font-body);font-size:13px;padding:6px 28px 6px 10px;border:1px solid var(--border);border-radius:6px;background:white;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27%3E%3Cpath d=%27M1 1l5 5 5-5%27 stroke=%27%23999%27 stroke-width=%271.5%27 fill=%27none%27/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer}
+.admin-reg-list{display:flex;flex-direction:column;gap:10px}
+.admin-reg-row{background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:14px;transition:box-shadow .15s}
+.admin-reg-row:hover{box-shadow:0 4px 16px rgba(0,0,0,.07)}
+.admin-reg-info{flex:1;min-width:0}
+.admin-reg-name{font-family:var(--font-display);font-size:17px;letter-spacing:.4px}
+.admin-reg-meta{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-reg-status{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;flex-shrink:0}
+.status-paye{background:#EAFAF1;color:#1E8449}
+.status-gratuit{background:#EBF5FB;color:#1A5276}
+.status-en_attente{background:#FEF9E7;color:#B7770D}
+.status-annule{background:#f5f5f5;color:#999}
+.admin-btn-del-reg{font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;background:#FDEDEC;color:#922B21;border:1px solid #F1948A;transition:all .15s;flex-shrink:0}
+.admin-btn-del-reg:hover{background:var(--red);color:white;border-color:var(--red)}
+
 /* RESPONSIVE */
 @media(max-width:580px){
   .form-row{grid-template-columns:1fr}
@@ -472,19 +496,19 @@ footer span{color:#888}
               <div style="background:#FF5F00;color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">HelloAsso</div>
             </div>
           </div>
-          <div style="text-align:center;padding:8px 0 16px">
+          <!-- État initial : bouton payer -->
+          <div id="ha-pay-block" style="text-align:center;padding:8px 0 16px">
             <button id="btn-open-helloasso" onclick="openHelloAsso()" style="font-family:var(--font-body);font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;border:none;cursor:pointer;background:#FF5F00;color:white;width:100%;max-width:360px;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background .15s;box-shadow:0 4px 14px rgba(255,95,0,.3)" onmouseover="this.style.background='#e65500'" onmouseout="this.style.background='#FF5F00'">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               Payer sur HelloAsso
             </button>
-            <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6">Une nouvelle fenêtre s'ouvrira sur la page de paiement HelloAsso.<br><strong>Revenez ici après paiement</strong> et cochez la case ci-dessous pour valider.</p>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6">Vous serez redirigé vers la page de paiement HelloAsso.<br>Votre inscription sera confirmée automatiquement <strong>après validation du paiement</strong>.</p>
           </div>
-          <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;background:#fafafa">
-            <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:10px">✅ Paiement effectué sur HelloAsso ?</div>
-            <div class="check-group">
-              <input type="checkbox" id="f-paiement-ok">
-              <div class="check-text">Je confirme avoir réalisé mon paiement sur HelloAsso et souhaite valider mon inscription.</div>
-            </div>
+          <!-- État post-retour HelloAsso : paiement validé -->
+          <div id="ha-paid-block" style="display:none;background:#EAFAF1;border:1px solid #A9DFBF;border-radius:var(--radius);padding:14px 16px;text-align:center">
+            <div style="font-size:20px;margin-bottom:6px">✅</div>
+            <div style="font-size:14px;font-weight:600;color:#1E8449">Paiement confirmé par HelloAsso</div>
+            <div style="font-size:13px;color:#555;margin-top:4px">Cliquez sur "Confirmer l'inscription" pour finaliser.</div>
           </div>
         </div>
       </div>
@@ -538,19 +562,50 @@ footer span{color:#888}
   </div>
   <div class="admin-content">
     <div class="admin-inner">
-      <div class="admin-section-title">GESTION DES ÉVÉNEMENTS</div>
-      <div class="admin-section-sub">Créez, modifiez ou supprimez les événements affichés sur la page d'inscription.</div>
-      <div id="admin-config-status" style="margin-bottom:1.5rem"></div>
-      <div class="admin-toolbar">
-        <div style="font-size:13px;color:var(--muted)"><span id="admin-event-count">0</span> événement(s) au total</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn-add-event" onclick="openEventForm(null)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Nouvel événement
-          </button>
+      <div class="admin-tabs">
+        <button class="admin-tab active" id="tab-events-btn" onclick="switchAdminTab('events')">📅 Événements</button>
+        <button class="admin-tab" id="tab-regs-btn" onclick="switchAdminTab('regs')">📋 Inscriptions</button>
+      </div>
+
+      <!-- TAB ÉVÉNEMENTS -->
+      <div class="admin-tab-content active" id="tab-events">
+        <div class="admin-section-title">GESTION DES ÉVÉNEMENTS</div>
+        <div class="admin-section-sub">Créez, modifiez ou supprimez les événements affichés sur la page d'inscription.</div>
+        <div id="admin-config-status" style="margin-bottom:1.5rem"></div>
+        <div class="admin-toolbar">
+          <div style="font-size:13px;color:var(--muted)"><span id="admin-event-count">0</span> événement(s) au total</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-add-event" onclick="openEventForm(null)">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nouvel événement
+            </button>
+          </div>
+        </div>
+        <div class="admin-events-list" id="admin-events-list"></div>
+      </div>
+
+      <!-- TAB INSCRIPTIONS -->
+      <div class="admin-tab-content" id="tab-regs">
+        <div class="admin-section-title">GESTION DES INSCRIPTIONS</div>
+        <div class="admin-section-sub">Consultez et supprimez des inscriptions. La suppression libère automatiquement une place sur l'événement.</div>
+        <div class="admin-reg-filters">
+          <select class="admin-reg-select" id="reg-filter-event" onchange="loadRegistrations()">
+            <option value="">— Tous les événements —</option>
+          </select>
+          <select class="admin-reg-select" id="reg-filter-status" onchange="loadRegistrations()">
+            <option value="">— Tous les statuts —</option>
+            <option value="paye">Payé</option>
+            <option value="gratuit">Gratuit</option>
+            <option value="en_attente">En attente</option>
+            <option value="annule">Annulé</option>
+          </select>
+          <button class="btn-add-event" style="font-size:13px;padding:7px 14px" onclick="loadRegistrations()">↻ Actualiser</button>
+          <span style="font-size:13px;color:var(--muted);margin-left:auto"><span id="reg-count">0</span> inscription(s)</span>
+        </div>
+        <div class="admin-reg-list" id="admin-reg-list">
+          <div class="admin-empty"><div class="admin-empty-icon">📋</div><div>Actualisez pour voir les inscriptions.</div></div>
         </div>
       </div>
-      <div class="admin-events-list" id="admin-events-list"></div>
     </div>
   </div>
 </div>
@@ -661,7 +716,7 @@ footer span{color:#888}
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
     <div class="confirm-icon">🗑️</div>
-    <div class="confirm-title">SUPPRIMER CET ÉVÉNEMENT ?</div>
+    <div class="confirm-title" id="confirm-title">SUPPRIMER ?</div>
     <div class="confirm-msg" id="confirm-msg">Cette action est irréversible.</div>
     <div class="confirm-btns">
       <button class="btn-cancel" onclick="closeConfirm()">Annuler</button>
@@ -690,6 +745,13 @@ const API = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+  async adminGet(path) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      headers: { 'Authorization': 'Bearer ' + API._token }
     });
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
@@ -794,8 +856,11 @@ function setupPaymentStep() {
   document.getElementById('paiement-options').style.display = isFree ? 'none' : 'block';
   if (!isFree) {
     document.getElementById('ha-montant-label').textContent = '€' + currentEvent.price;
-    const cb = document.getElementById('f-paiement-ok');
-    if (cb) cb.checked = false;
+    // Afficher l'état selon si le paiement HA a été confirmé au retour
+    const paid = !!window._haPaymentConfirmed;
+    document.getElementById('ha-pay-block').style.display  = paid ? 'none' : 'block';
+    document.getElementById('ha-paid-block').style.display = paid ? 'block' : 'none';
+    document.getElementById('btn-next').disabled = currentEvent.helloasso && !paid;
   }
 }
 
@@ -804,12 +869,31 @@ async function openHelloAsso() {
   btn.disabled = true;
   btn.textContent = 'Redirection en cours...';
   try {
-    const result = await API.post('/api/checkout', {
+    const nom    = (document.getElementById('f-nom').value || '').toUpperCase();
+    const prenom = document.getElementById('f-prenom').value;
+    const email  = document.getElementById('f-email').value;
+    // Sauvegarder toute la saisie avant redirection
+    sessionStorage.setItem('ha_pending', JSON.stringify({
       event_id: currentEvent.id,
-      nom:      (document.getElementById('f-nom').value || '').toUpperCase(),
-      prenom:   document.getElementById('f-prenom').value,
-      email:    document.getElementById('f-email').value,
-    });
+      nom, prenom, email,
+      date_naissance:    document.getElementById('f-dob').value,
+      telephone:         document.getElementById('f-tel').value,
+      licence_ffk:       document.getElementById('f-licence').value || null,
+      is_mineur:         document.getElementById('f-mineur').checked,
+      categorie:         document.getElementById('f-categorie').value || null,
+      niveau:            document.getElementById('f-niveau').value || null,
+      regime:            document.getElementById('f-regime').value || null,
+      ceinture_actuelle: currentEvent.isGrade ? (document.getElementById('f-ceinture-actuelle').value || null) : null,
+      ceinture_visee:    currentEvent.isGrade ? (document.getElementById('f-ceinture-visee').value || null) : null,
+      parent_nom:        document.getElementById('f-mineur').checked ? (document.getElementById('f-parent-nom').value || null) : null,
+      parent_prenom:     document.getElementById('f-mineur').checked ? (document.getElementById('f-parent-prenom').value || null) : null,
+      parent_tel:        document.getElementById('f-mineur').checked ? (document.getElementById('f-parent-tel').value || null) : null,
+      message:           document.getElementById('f-message').value || null,
+      certif_medical:    document.getElementById('f-certif').checked,
+      droit_image:       document.getElementById('f-image').checked,
+      reglement_ok:      document.getElementById('f-reglement').checked,
+    }));
+    const result = await API.post('/api/checkout', { event_id: currentEvent.id, nom, prenom, email });
     window.location.href = result.redirectUrl;
   } catch (e) {
     btn.disabled = false;
@@ -835,7 +919,10 @@ function validateStep() {
     if (!document.getElementById('f-reglement').checked) { alert('Vous devez accepter le règlement intérieur pour continuer.'); return false; }
   }
   if (currentStep === 4 && currentEvent.price !== 0) {
-    if (!document.getElementById('f-paiement-ok').checked) { alert('Merci de cocher la case confirmant que vous avez effectué le paiement sur HelloAsso.'); return false; }
+    if (currentEvent.helloasso && !window._haPaymentConfirmed) {
+      alert('Vous devez compléter le paiement sur HelloAsso avant de valider votre inscription.');
+      return false;
+    }
   }
   return true;
 }
@@ -864,36 +951,45 @@ function showSuccess() {
   const message    = document.getElementById('f-message').value || '-';
   const isMineur   = document.getElementById('f-mineur').checked;
   const prix       = currentEvent.price === 0 ? 'Gratuit' : '€' + currentEvent.price;
-  const now        = new Date().toLocaleString('fr-FR');
 
-  const payload = {
-    event_id: currentEvent.id,
-    nom, prenom, date_naissance: dob, telephone: tel, email,
-    licence_ffk:       licence !== '-' ? licence : null,
-    is_mineur:         isMineur,
-    categorie:         cat || null,
-    niveau:            niveau || null,
-    regime:            document.getElementById('f-regime').value || null,
-    ceinture_actuelle: currentEvent.isGrade ? (document.getElementById('f-ceinture-actuelle').value || null) : null,
-    ceinture_visee:    currentEvent.isGrade ? (document.getElementById('f-ceinture-visee').value || null) : null,
-    parent_nom:        isMineur ? (document.getElementById('f-parent-nom').value || null) : null,
-    parent_prenom:     isMineur ? (document.getElementById('f-parent-prenom').value || null) : null,
-    parent_tel:        isMineur ? (document.getElementById('f-parent-tel').value || null) : null,
-    message:           message !== '-' ? message : null,
-    certif_medical:    document.getElementById('f-certif').checked,
-    droit_image:       document.getElementById('f-image').checked,
-    reglement_ok:      document.getElementById('f-reglement').checked
-  };
+  // Si retour HelloAsso, utiliser le payload sauvegardé, sinon construire depuis le formulaire
+  let payload = window._haPendingPayload;
+  if (!payload) {
+    payload = {
+      event_id: currentEvent.id,
+      nom, prenom, date_naissance: dob, telephone: tel, email,
+      licence_ffk:       licence !== '-' ? licence : null,
+      is_mineur:         isMineur,
+      categorie:         cat || null,
+      niveau:            niveau || null,
+      regime:            document.getElementById('f-regime').value || null,
+      ceinture_actuelle: currentEvent.isGrade ? (document.getElementById('f-ceinture-actuelle').value || null) : null,
+      ceinture_visee:    currentEvent.isGrade ? (document.getElementById('f-ceinture-visee').value || null) : null,
+      parent_nom:        isMineur ? (document.getElementById('f-parent-nom').value || null) : null,
+      parent_prenom:     isMineur ? (document.getElementById('f-parent-prenom').value || null) : null,
+      parent_tel:        isMineur ? (document.getElementById('f-parent-tel').value || null) : null,
+      message:           message !== '-' ? message : null,
+      certif_medical:    document.getElementById('f-certif').checked,
+      droit_image:       document.getElementById('f-image').checked,
+      reglement_ok:      document.getElementById('f-reglement').checked
+    };
+  }
+  // Nettoyage de l'état HelloAsso
+  window._haPaymentConfirmed = false;
+  window._haPendingPayload   = null;
+  sessionStorage.removeItem('ha_pending');
 
-  const emailMsg = 'Un email de confirmation va vous être envoyé à <strong>' + email + '</strong>.';
+  const displayNom    = payload.nom || nom;
+  const displayPrenom = payload.prenom || prenom;
 
   document.querySelector('.modal-body').innerHTML =
     '<div class="success-screen">' +
       '<div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' +
       '<div class="success-title">INSCRIPTION VALIDÉE</div>' +
-      '<p class="success-sub">Votre inscription à <strong>' + currentEvent.title + '</strong> a bien été enregistrée. ' + emailMsg + '</p>' +
+      '<p class="success-sub">Votre inscription à <strong>' + currentEvent.title + '</strong> a bien été enregistrée. ' +
+      'Un email de confirmation va vous être envoyé à <strong>' + (payload.email || email) + '</strong>.</p>' +
       '<div class="recap-card">' +
-        '<div class="recap-row"><span class="recap-label">Participant</span><span>' + nom + ' ' + prenom + '</span></div>' +
+        '<div class="recap-row"><span class="recap-label">Participant</span><span>' + displayNom + ' ' + displayPrenom + '</span></div>' +
         '<div class="recap-row"><span class="recap-label">Événement</span><span>' + currentEvent.title + '</span></div>' +
         '<div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">' + prix + '</span></div>' +
         '<div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>' +
@@ -906,7 +1002,6 @@ function showSuccess() {
   API.post('/api/registrations', payload)
     .then(r => console.log('Inscription enregistrée, id:', r.id))
     .catch(e => console.warn('Erreur D1:', e));
-
 }
 
 async function sendBrevoNotification(d) {
@@ -958,6 +1053,38 @@ async function initPage() {
     adminEvents = evts.map(normalizeEvent);
     adminEvents.forEach(ev => { events[ev.id] = { title: ev.title, sub: buildSubText(ev), price: ev.price, helloasso: !!ev.helloasso, helloasso_url: ev.helloasso_url || '', isGrade: !!ev.isGrade }; });
     rebuildPublicPage();
+
+    // ── Retour HelloAsso après paiement ──────────────────────────
+    const params = new URLSearchParams(window.location.search);
+    const checkoutStatus = params.get('checkout');
+    const checkoutEventId = params.get('event_id');
+    // Nettoyer l'URL
+    if (checkoutStatus) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (checkoutStatus === 'success' && checkoutEventId) {
+      const savedRaw = sessionStorage.getItem('ha_pending');
+      if (savedRaw) {
+        try {
+          const saved = JSON.parse(savedRaw);
+          if (saved.event_id === checkoutEventId && events[checkoutEventId]) {
+            window._haPaymentConfirmed = true;
+            window._haPendingPayload   = saved;
+            currentEvent = { ...events[checkoutEventId], id: checkoutEventId };
+            // Aller directement à l'étape 4 et afficher l'état "payé"
+            currentStep = 4;
+            document.getElementById('modal-title').textContent = currentEvent.title;
+            document.getElementById('modal-sub').textContent   = currentEvent.sub;
+            updateStepUI();
+            document.getElementById('modal-overlay').classList.add('open');
+            document.body.style.overflow = 'hidden';
+          }
+        } catch(e) { console.warn('Erreur parsing ha_pending:', e); }
+      }
+    } else if (checkoutStatus === 'error') {
+      sessionStorage.removeItem('ha_pending');
+      alert('Le paiement HelloAsso a échoué ou a été annulé. Vous pouvez réessayer.');
+    }
   } catch (e) {
     console.error('Impossible de charger les événements:', e);
     document.getElementById('events-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;color:#999">Impossible de charger les événements.</div>';
@@ -995,7 +1122,93 @@ async function checkAdminLogin() {
   }
 }
 
-function openAdminPanel() { document.getElementById('admin-panel').classList.add('open'); document.body.style.overflow = 'hidden'; renderAdminList(); }
+function switchAdminTab(tab) {
+  ['events', 'regs'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('tab-' + t + '-btn').classList.toggle('active', t === tab);
+  });
+  if (tab === 'regs') loadRegistrations();
+}
+
+let adminRegistrations = [];
+let pendingDeleteRegId = null;
+
+async function loadRegistrations() {
+  const eventId = document.getElementById('reg-filter-event').value;
+  const status  = document.getElementById('reg-filter-status').value;
+  const list = document.getElementById('admin-reg-list');
+  list.innerHTML = '<div class="admin-empty"><div style="font-size:24px">⏳</div><div>Chargement…</div></div>';
+  try {
+    let path = '/api/registrations';
+    const qs = [];
+    if (eventId) qs.push('event_id=' + encodeURIComponent(eventId));
+    if (status)  qs.push('status='   + encodeURIComponent(status));
+    if (qs.length) path += '?' + qs.join('&');
+    adminRegistrations = await API.adminGet(path);
+    document.getElementById('reg-count').textContent = adminRegistrations.length;
+    renderRegistrationsList();
+  } catch (e) {
+    list.innerHTML = '<div class="admin-empty"><div class="admin-empty-icon">⚠️</div><div>Erreur : ' + e.message + '</div></div>';
+  }
+}
+
+function renderRegistrationsList() {
+  const list = document.getElementById('admin-reg-list');
+  if (adminRegistrations.length === 0) {
+    list.innerHTML = '<div class="admin-empty"><div class="admin-empty-icon">📭</div><div>Aucune inscription trouvée.</div></div>';
+    return;
+  }
+  const statusLabels = { paye: 'Payé', gratuit: 'Gratuit', en_attente: 'En attente', annule: 'Annulé' };
+  list.innerHTML = adminRegistrations.map(reg => {
+    const statusCls = 'status-' + (reg.paiement_status || 'en_attente');
+    const statusTxt = statusLabels[reg.paiement_status] || reg.paiement_status;
+    const dob = reg.date_naissance || '—';
+    const evTitle = reg.event_title || reg.event_id;
+    return '<div class="admin-reg-row">' +
+      '<div class="admin-reg-info">' +
+        '<div class="admin-reg-name">' + (reg.nom || '').toUpperCase() + ' ' + (reg.prenom || '') + '</div>' +
+        '<div class="admin-reg-meta">' + evTitle + ' · ' + (reg.email || '') + ' · Né(e) le ' + dob + '</div>' +
+      '</div>' +
+      '<span class="admin-reg-status ' + statusCls + '">' + statusTxt + '</span>' +
+      '<button class="admin-btn-del-reg" data-rid="' + reg.id + '" onclick="askDeleteReg(this.dataset.rid)">🗑 Supprimer</button>' +
+    '</div>';
+  }).join('');
+}
+
+function askDeleteReg(id) {
+  const reg = adminRegistrations.find(r => String(r.id) === String(id));
+  if (!reg) return;
+  pendingDeleteRegId = id;
+  document.getElementById('confirm-title').textContent = 'SUPPRIMER CETTE INSCRIPTION ?';
+  document.getElementById('confirm-msg').textContent   =
+    'Supprimer l\'inscription de ' + (reg.prenom || '') + ' ' + (reg.nom || '').toUpperCase() +
+    ' à "' + (reg.event_title || reg.event_id) + '" ? Une place sera libérée automatiquement.';
+  document.getElementById('confirm-yes-btn').onclick = () => doDeleteReg();
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+async function doDeleteReg() {
+  if (!pendingDeleteRegId) return;
+  try {
+    await API.adminDelete('/api/registrations/' + pendingDeleteRegId);
+    adminRegistrations = adminRegistrations.filter(r => String(r.id) !== String(pendingDeleteRegId));
+    // Mettre à jour spots_left localement
+    const reg = adminRegistrations.find(r => String(r.id) === String(pendingDeleteRegId)); // already removed, get from old list
+    document.getElementById('reg-count').textContent = adminRegistrations.length;
+    pendingDeleteRegId = null;
+    closeConfirm();
+    renderRegistrationsList();
+    // Recharger les événements pour mettre à jour spots_left
+    const evts = await API.get('/api/events');
+    adminEvents = evts.map(normalizeEvent);
+    renderAdminList();
+    rebuildPublicPage();
+  } catch (e) {
+    alert('Erreur lors de la suppression : ' + e.message);
+    closeConfirm();
+  }
+}
+
 function quitAdmin() { document.getElementById('admin-panel').classList.remove('open'); document.body.style.overflow = ''; rebuildPublicPage(); }
 
 function fmtDate(d1, d2) {
@@ -1116,6 +1329,7 @@ function askDelete(id) {
   const ev = adminEvents.find(e => e.id === id);
   if (!ev) return;
   pendingDeleteId = id;
+  document.getElementById('confirm-title').textContent = 'SUPPRIMER CET ÉVÉNEMENT ?';
   document.getElementById('confirm-msg').textContent = 'Voulez-vous vraiment supprimer "' + ev.title + '" ? Cette action est irréversible.';
   document.getElementById('confirm-overlay').classList.add('open');
   document.getElementById('confirm-yes-btn').onclick = () => doDelete();
@@ -1531,6 +1745,9 @@ export default {
           if (ev.status === 'complet') return err('Événement complet', 409);
           if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
           const paiementStatus = ev.price === 0 ? 'gratuit' : 'en_attente';
+          // Pour les événements HelloAsso payants, on insère l'inscription mais on ne décrémente
+          // spots_left qu'une fois le paiement validé (statut en_attente = place réservée provisoirement)
+          const decrementSpot = paiementStatus !== 'en_attente';
           const info = await env.DB.prepare(`
             INSERT INTO registrations (
               event_id, nom, prenom, date_naissance, telephone, email,
@@ -1551,6 +1768,12 @@ export default {
             body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
             ev.price, paiementStatus, body.helloasso_ref ?? null,
           ).run();
+          // Décrémenter spots_left uniquement pour gratuit (les payants via HA attendent le webhook)
+          if (decrementSpot) {
+            await env.DB.prepare(
+              `UPDATE events SET spots_left = spots_left - 1 WHERE id = ? AND spots_left > 0`
+            ).bind(body.event_id).run();
+          }
           const regData = {
             nom: body.nom, prenom: body.prenom, email: body.email,
             telephone: body.telephone, date_naissance: body.date_naissance,
@@ -1573,18 +1796,43 @@ export default {
           if (!validStatuses.includes(body.paiement_status)) {
             return err(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
           }
+          // Récupérer le statut précédent pour décider si on décrémente spots_left
+          const prev = await env.DB.prepare(
+            `SELECT paiement_status, event_id FROM registrations WHERE id = ?`
+          ).bind(resId).first();
+          if (!prev) return err('Inscription introuvable', 404);
           const info = await env.DB.prepare(`
             UPDATE registrations SET paiement_status = ?, helloasso_ref = COALESCE(?, helloasso_ref) WHERE id = ?
           `).bind(body.paiement_status, body.helloasso_ref ?? null, resId).run();
           if (info.changes === 0) return err('Inscription introuvable', 404);
+          // Si on passe de en_attente → paye, décrémenter spots_left
+          if (prev.paiement_status === 'en_attente' && body.paiement_status === 'paye') {
+            await env.DB.prepare(
+              `UPDATE events SET spots_left = MAX(0, spots_left - 1) WHERE id = ?`
+            ).bind(prev.event_id).run();
+          }
           return json({ id: resId, paiement_status: body.paiement_status });
         }
 
         // DELETE /api/registrations/:id [admin]
         if (method === 'DELETE' && resId) {
           requireAdmin();
+          // Récupérer l'inscription avant de la supprimer pour avoir l'event_id
+          const reg = await env.DB.prepare(
+            `SELECT event_id, paiement_status FROM registrations WHERE id = ?`
+          ).bind(resId).first();
+          if (!reg) return err('Inscription introuvable', 404);
           const info = await env.DB.prepare(`DELETE FROM registrations WHERE id = ?`).bind(resId).run();
           if (info.changes === 0) return err('Inscription introuvable', 404);
+          // Libérer la place seulement si l'inscription était active (pas annulée)
+          if (reg.paiement_status !== 'annule') {
+            await env.DB.prepare(
+              `UPDATE events SET spots_left = MIN(spots_total, spots_left + 1), status = 'disponible' WHERE id = ? AND status = 'complet'`
+            ).bind(reg.event_id).run();
+            await env.DB.prepare(
+              `UPDATE events SET spots_left = MIN(spots_total, spots_left + 1) WHERE id = ? AND status != 'complet'`
+            ).bind(reg.event_id).run();
+          }
           return json({ deleted: Number(resId) });
         }
       }
