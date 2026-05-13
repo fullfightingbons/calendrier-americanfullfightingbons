@@ -1496,6 +1496,18 @@ export default {
       // ══════════════════════════════════════════════════════════
       if (resource === 'registrations') {
 
+        // GET /api/registrations/public [public] — pour le tableau hero
+        if (method === 'GET' && resId === 'public') {
+        const { results } = await env.DB.prepare(`
+        SELECT r.nom, r.prenom, r.paiement_status, e.title as event_title, e.date_start
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        WHERE e.date_start >= date('now')
+        ORDER BY e.date_start ASC
+        LIMIT 20
+        `).all();
+          return json(results);
+  }
         // GET /api/registrations [admin]
         if (method === 'GET' && !resId) {
           requireAdmin();
