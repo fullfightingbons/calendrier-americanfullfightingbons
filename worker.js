@@ -1510,8 +1510,19 @@ export default {
         if (!ev)                     return err('Evenement introuvable', 404);
         if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
         if (ev.status === 'complet') return err('Evenement complet', 409);
-      }
 
+        const origin    = url.origin;
+        const returnUrl = `${origin}/?checkout=success&event_id=${event_id}`;
+        const errorUrl  = `${origin}/?checkout=error&event_id=${event_id}`;
+
+        const redirectUrl = await createHelloAssoCheckout(env, {
+          eventTitle: ev.title,
+          amount:     ev.price,
+          email, prenom, nom,
+          returnUrl, errorUrl,
+        });
+        return json({ redirectUrl });
+      }
       // ── Route introuvable ─────────────────────────────────────
       return err('Route introuvable', 404);
 
