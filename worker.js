@@ -248,30 +248,6 @@ footer span{color:#888}
 .spots-low{background:#FEF9E7;color:#B7770D}
 .spots-full{background:#f5f5f5;color:#999}
 
-/* ADMIN TABS */
-.admin-tabs{display:flex;gap:4px;margin-bottom:2rem;background:#e8e8e8;padding:4px;border-radius:10px;width:fit-content}
-.admin-tab{font-family:var(--font-body);font-size:13px;font-weight:600;padding:8px 20px;border-radius:7px;border:none;background:transparent;color:#888;cursor:pointer;transition:all .15s}
-.admin-tab.active{background:white;color:var(--dark);box-shadow:0 1px 4px rgba(0,0,0,.1)}
-
-/* REGISTRATIONS TABLE */
-.reg-filter-bar{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;align-items:center}
-.reg-filter-select{font-family:var(--font-body);font-size:13px;padding:7px 12px;border:1px solid var(--border);border-radius:7px;background:white;color:var(--dark);cursor:pointer}
-.reg-count{font-size:13px;color:var(--muted);margin-left:auto}
-.reg-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg);background:white}
-.reg-table{width:100%;border-collapse:collapse;font-size:13px}
-.reg-table th{background:#f8f8f8;padding:10px 14px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
-.reg-table td{padding:10px 14px;border-bottom:1px solid #f2f2f2;vertical-align:middle}
-.reg-table tr:last-child td{border-bottom:none}
-.reg-table tr:hover td{background:#fafafa}
-.reg-status{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
-.reg-status.gratuit{background:#EAFAF1;color:#1E8449}
-.reg-status.paye{background:#EAFAF1;color:#1E8449}
-.reg-status.en_attente{background:#FEF9E7;color:#B7770D}
-.reg-status.annule{background:#f5f5f5;color:#999}
-.btn-del-reg{font-family:var(--font-body);font-size:11px;font-weight:600;padding:5px 10px;border-radius:5px;border:none;background:#FDEDEC;color:#922B21;cursor:pointer;transition:all .15s;white-space:nowrap}
-.btn-del-reg:hover{background:var(--red);color:white}
-.reg-empty{text-align:center;padding:2.5rem;color:var(--muted);font-size:14px}
-
 /* RESPONSIVE */
 @media(max-width:580px){
   .form-row{grid-template-columns:1fr}
@@ -562,48 +538,19 @@ footer span{color:#888}
   </div>
   <div class="admin-content">
     <div class="admin-inner">
-      <div class="admin-tabs">
-        <button class="admin-tab active" id="tab-events" onclick="switchAdminTab('events')">📅 Événements</button>
-        <button class="admin-tab" id="tab-regs" onclick="switchAdminTab('regs')">👥 Inscriptions</button>
-      </div>
-
-      <!-- ONGLET ÉVÉNEMENTS -->
-      <div id="admin-pane-events">
-        <div class="admin-section-title">GESTION DES ÉVÉNEMENTS</div>
-        <div class="admin-section-sub">Créez, modifiez ou supprimez les événements affichés sur la page d'inscription.</div>
-        <div id="admin-config-status" style="margin-bottom:1.5rem"></div>
-        <div class="admin-toolbar">
-          <div style="font-size:13px;color:var(--muted)"><span id="admin-event-count">0</span> événement(s) au total</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn-add-event" onclick="openEventForm(null)">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Nouvel événement
-            </button>
-          </div>
+      <div class="admin-section-title">GESTION DES ÉVÉNEMENTS</div>
+      <div class="admin-section-sub">Créez, modifiez ou supprimez les événements affichés sur la page d'inscription.</div>
+      <div id="admin-config-status" style="margin-bottom:1.5rem"></div>
+      <div class="admin-toolbar">
+        <div style="font-size:13px;color:var(--muted)"><span id="admin-event-count">0</span> événement(s) au total</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn-add-event" onclick="openEventForm(null)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nouvel événement
+          </button>
         </div>
-        <div class="admin-events-list" id="admin-events-list"></div>
       </div>
-
-      <!-- ONGLET INSCRIPTIONS -->
-      <div id="admin-pane-regs" style="display:none">
-        <div class="admin-section-title">INSCRIPTIONS</div>
-        <div class="admin-section-sub">Consultez et gérez toutes les inscriptions enregistrées.</div>
-        <div class="reg-filter-bar">
-          <select class="reg-filter-select" id="reg-filter-event" onchange="loadRegistrations()">
-            <option value="">Tous les événements</option>
-          </select>
-          <select class="reg-filter-select" id="reg-filter-status" onchange="loadRegistrations()">
-            <option value="">Tous les statuts</option>
-            <option value="en_attente">En attente</option>
-            <option value="paye">Payé</option>
-            <option value="gratuit">Gratuit</option>
-            <option value="annule">Annulé</option>
-          </select>
-          <span class="reg-count" id="reg-count"></span>
-        </div>
-        <div id="reg-table-container"><div class="reg-empty">Chargement…</div></div>
-      </div>
-
+      <div class="admin-events-list" id="admin-events-list"></div>
     </div>
   </div>
 </div>
@@ -1048,15 +995,7 @@ async function checkAdminLogin() {
   }
 }
 
-function openAdminPanel() {
-  document.getElementById('admin-panel').classList.add('open');
-  document.body.style.overflow = 'hidden';
-  renderAdminList();
-  // Peupler le filtre événements dans l'onglet inscriptions
-  const sel = document.getElementById('reg-filter-event');
-  sel.innerHTML = '<option value="">Tous les événements</option>' +
-    adminEvents.map(ev => '<option value="' + ev.id + '">' + ev.title + '</option>').join('');
-}
+function openAdminPanel() { document.getElementById('admin-panel').classList.add('open'); document.body.style.overflow = 'hidden'; renderAdminList(); }
 function quitAdmin() { document.getElementById('admin-panel').classList.remove('open'); document.body.style.overflow = ''; rebuildPublicPage(); }
 
 function fmtDate(d1, d2) {
@@ -1196,92 +1135,6 @@ async function doDelete() {
 }
 
 function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
-
-/* ── Onglets admin ── */
-function switchAdminTab(tab) {
-  document.getElementById('admin-pane-events').style.display = tab === 'events' ? 'block' : 'none';
-  document.getElementById('admin-pane-regs').style.display   = tab === 'regs'   ? 'block' : 'none';
-  document.getElementById('tab-events').classList.toggle('active', tab === 'events');
-  document.getElementById('tab-regs').classList.toggle('active', tab === 'regs');
-  if (tab === 'regs') loadRegistrations();
-}
-
-/* ── Inscriptions ── */
-let allRegistrations = [];
-let pendingDeleteRegId = null;
-
-async function loadRegistrations() {
-  const container = document.getElementById('reg-table-container');
-  const eventFilter  = document.getElementById('reg-filter-event').value;
-  const statusFilter = document.getElementById('reg-filter-status').value;
-  container.innerHTML = '<div class="reg-empty">Chargement…</div>';
-  try {
-    let path = '/api/registrations?';
-    if (eventFilter)  path += 'event_id=' + encodeURIComponent(eventFilter) + '&';
-    if (statusFilter) path += 'status='   + encodeURIComponent(statusFilter);
-    const regs = await API.get(path);
-    allRegistrations = regs;
-    document.getElementById('reg-count').textContent = regs.length + ' inscription(s)';
-    renderRegistrationsTable(regs);
-  } catch(e) {
-    container.innerHTML = '<div class="reg-empty">Erreur de chargement : ' + e.message + '</div>';
-  }
-}
-
-function renderRegistrationsTable(regs) {
-  const container = document.getElementById('reg-table-container');
-  if (regs.length === 0) {
-    container.innerHTML = '<div class="reg-empty">📭 Aucune inscription trouvée.</div>';
-    return;
-  }
-  const statusLabel = { gratuit: 'Gratuit', paye: 'Payé', en_attente: 'En attente', annule: 'Annulé' };
-  container.innerHTML =
-    '<div class="reg-table-wrap"><table class="reg-table">' +
-    '<thead><tr>' +
-    '<th>Participant</th><th>Événement</th><th>Email</th><th>Tél</th><th>Montant</th><th>Statut</th><th>Date</th><th></th>' +
-    '</tr></thead><tbody>' +
-    regs.map(r => {
-      const date = new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-      const prix = r.montant === 0 ? 'Gratuit' : r.montant + ' €';
-      const st   = r.paiement_status || 'en_attente';
-      return '<tr>' +
-        '<td><strong>' + r.nom + ' ' + r.prenom + '</strong>' + (r.is_mineur ? ' <span style="color:#E67E22;font-size:11px">mineur</span>' : '') + '</td>' +
-        '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.event_title || r.event_id) + '</td>' +
-        '<td><a href="mailto:' + r.email + '" style="color:inherit">' + r.email + '</a></td>' +
-        '<td style="white-space:nowrap">' + r.telephone + '</td>' +
-        '<td style="white-space:nowrap;font-weight:600">' + prix + '</td>' +
-        '<td><span class="reg-status ' + st + '">' + (statusLabel[st] || st) + '</span></td>' +
-        '<td style="white-space:nowrap;color:var(--muted)">' + date + '</td>' +
-        '<td><button class="btn-del-reg" data-rid="' + r.id + '" onclick="askDeleteReg(this.dataset.rid)">🗑 Supprimer</button></td>' +
-        '</tr>';
-    }).join('') +
-    '</tbody></table></div>';
-}
-
-function askDeleteReg(id) {
-  const reg = allRegistrations.find(r => String(r.id) === String(id));
-  if (!reg) return;
-  pendingDeleteRegId = id;
-  document.getElementById('confirm-msg').textContent =
-    'Supprimer l\'inscription de ' + reg.prenom + ' ' + reg.nom + ' pour "' + (reg.event_title || reg.event_id) + '" ? Cette action est irréversible.';
-  document.getElementById('confirm-yes-btn').onclick = () => doDeleteReg();
-  document.getElementById('confirm-overlay').classList.add('open');
-}
-
-async function doDeleteReg() {
-  if (!pendingDeleteRegId) return;
-  try {
-    await API.adminDelete('/api/registrations/' + pendingDeleteRegId);
-    allRegistrations = allRegistrations.filter(r => String(r.id) !== String(pendingDeleteRegId));
-    pendingDeleteRegId = null;
-    closeConfirm();
-    renderRegistrationsTable(allRegistrations);
-    document.getElementById('reg-count').textContent = allRegistrations.length + ' inscription(s)';
-  } catch(e) {
-    alert('Erreur lors de la suppression : ' + e.message);
-    closeConfirm();
-  }
-}
 
 function buildSubText(ev) {
   const typeLbl = typeLabels[ev.type] || ev.type;
