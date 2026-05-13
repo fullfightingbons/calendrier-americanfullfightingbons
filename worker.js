@@ -327,30 +327,30 @@ footer span{color:#888}
         <div class="step-desc">Renseignez les coordonnées du participant à l'événement.</div>
         <div class="form-row">
           <div class="form-group">
-            <label>Nom <span class="req">*</span></label>
+            <label for="f-nom">Nom <span class="req">*</span></label>
             <input type="text" id="f-nom" placeholder="DUPONT">
           </div>
           <div class="form-group">
-            <label>Prénom <span class="req">*</span></label>
+            <label for="f-prenom">Prénom <span class="req">*</span></label>
             <input type="text" id="f-prenom" placeholder="Léa">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Date de naissance <span class="req">*</span></label>
+            <label for="f-dob">Date de naissance <span class="req">*</span></label>
             <input type="date" id="f-dob">
           </div>
           <div class="form-group">
-            <label>Téléphone <span class="req">*</span></label>
+            <label for="f-tel">Téléphone <span class="req">*</span></label>
             <input type="tel" id="f-tel" placeholder="06 00 00 00 00">
           </div>
         </div>
         <div class="form-group">
-          <label>Email <span class="req">*</span></label>
+          <label for="f-email">Email <span class="req">*</span></label>
           <input type="email" id="f-email" placeholder="lea.dupont@example.fr">
         </div>
         <div class="form-group">
-          <label>Numéro de licence fédérale</label>
+          <label for=\"f-licence\">Numéro de licence fédérale</label>
           <input type="text" id="f-licence" placeholder="FFK-XXXXXXXX (si applicable)">
         </div>
         <div class="check-group" style="margin-top:.5rem">
@@ -364,7 +364,7 @@ footer span{color:#888}
         <div class="step-title">Détails & informations complémentaires</div>
         <div class="step-desc">Précisez les informations nécessaires à l'organisation.</div>
         <div class="form-group">
-          <label>Catégorie de poids / Catégorie d'âge</label>
+          <label for="f-categorie">Catégorie de poids / Catégorie d'âge</label>
           <select id="f-categorie">
             <option value="">— Sélectionner —</option>
             <option>Benjamin (-12 ans)</option>
@@ -379,7 +379,7 @@ footer span{color:#888}
           <div class="info-alert">Passage de grade — précisez votre ceinture actuelle et la ceinture visée.</div>
           <div class="form-row">
             <div class="form-group">
-              <label>Ceinture actuelle <span class="req">*</span></label>
+              <label for="f-ceinture-actuelle">Ceinture actuelle <span class="req">*</span></label>
               <select id="f-ceinture-actuelle">
                 <option value="">— Sélectionner —</option>
                 <option>Blanche</option><option>Blanche–Jaune</option><option>Jaune</option>
@@ -388,7 +388,7 @@ footer span{color:#888}
               </select>
             </div>
             <div class="form-group">
-              <label>Ceinture visée <span class="req">*</span></label>
+              <label for="f-ceinture-visee">Ceinture visée <span class="req">*</span></label>
               <select id="f-ceinture-visee">
                 <option value="">— Sélectionner —</option>
                 <option>Blanche–Jaune</option><option>Jaune</option>
@@ -399,7 +399,7 @@ footer span{color:#888}
           </div>
         </div>
         <div class="form-group">
-          <label>Niveau pratique</label>
+          <label for=\"f-niveau\">Niveau pratique</label>
           <select id="f-niveau">
             <option value="">— Sélectionner —</option>
             <option>Débutant (moins d'1 an)</option>
@@ -409,28 +409,28 @@ footer span{color:#888}
           </select>
         </div>
         <div class="form-group">
-          <label>Régime alimentaire / Allergie (optionnel)</label>
+          <label for="f-regime">Régime alimentaire / Allergie (optionnel)</label>
           <input type="text" id="f-regime" placeholder="Ex : végétarien, allergie aux arachides…">
         </div>
         <div id="mineur-section" style="display:none">
           <div class="info-alert">Ce participant est mineur — le représentant légal doit valider l'inscription.</div>
           <div class="form-row">
             <div class="form-group">
-              <label>Nom du représentant légal <span class="req">*</span></label>
+              <label for="f-parent-nom">Nom du représentant légal <span class="req">*</span></label>
               <input type="text" id="f-parent-nom" placeholder="DUPONT">
             </div>
             <div class="form-group">
-              <label>Prénom <span class="req">*</span></label>
+              <label for="f-parent-prenom">Prénom <span class="req">*</span></label>
               <input type="text" id="f-parent-prenom" placeholder="Marie">
             </div>
           </div>
           <div class="form-group">
-            <label>Téléphone représentant légal <span class="req">*</span></label>
+            <label for="f-parent-tel">Téléphone représentant légal <span class="req">*</span></label>
             <input type="tel" id="f-parent-tel" placeholder="06 00 00 00 00">
           </div>
         </div>
         <div class="form-group" style="margin-top:.5rem">
-          <label>Message / remarque pour l'organisateur (optionnel)</label>
+          <label for="f-message">Message / remarque pour l'organisateur (optionnel)</label>
           <textarea id="f-message" placeholder="Informations utiles pour l'organisation…"></textarea>
         </div>
         <div class="check-group">
@@ -515,7 +515,7 @@ footer span{color:#888}
     <div class="admin-login-body">
       <div class="admin-login-error" id="login-error">Mot de passe incorrect. Réessayez.</div>
       <div class="form-group">
-        <label>Mot de passe administrateur <span class="req">*</span></label>
+        <label for="admin-pw">Mot de passe administrateur <span class="req">*</span></label>
         <input type="password" id="admin-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdminLogin()">
       </div>
       <button class="btn-save" style="width:100%;margin-top:.5rem" onclick="checkAdminLogin()">Accéder au panneau →</button>
@@ -566,15 +566,15 @@ footer span{color:#888}
       <input type="hidden" id="ae-id">
       <div class="admin-form-section">Informations générales</div>
       <div class="form-group">
-        <label>Titre de l'événement <span class="req">*</span></label>
+        <label for=\"ae-title\">Titre de l'événement <span class=\"req\">*</span></label>
         <input type="text" id="ae-title" placeholder="Ex : Stage Été — Frappe & Déplacement">
       </div>
       <div class="form-group">
-        <label>Sous-titre / description courte <span class="req">*</span></label>
+        <label for="ae-sub">Sous-titre / description courte <span class="req">*</span></label>
         <input type="text" id="ae-sub" placeholder="Ex : Tous niveaux · 2 jours intensifs">
       </div>
       <div class="form-group">
-        <label>Type d'événement <span class="req">*</span></label>
+        <label for="ae-type-group">Type d'événement <span class="req">*</span></label>
         <div class="admin-toggle-group" id="ae-type-group">
           <button class="admin-toggle-btn" data-val="stage" onclick="selectToggle('ae-type-group',this)">Stage</button>
           <button class="admin-toggle-btn" data-val="competition" onclick="selectToggle('ae-type-group',this)">Compétition</button>
@@ -585,42 +585,42 @@ footer span{color:#888}
       <div class="admin-form-section">Date, lieu & horaires</div>
       <div class="form-row">
         <div class="form-group">
-          <label>Date de début <span class="req">*</span></label>
+          <label for="ae-date-start">Date de début <span class="req">*</span></label>
           <input type="date" id="ae-date-start">
         </div>
         <div class="form-group">
-          <label>Date de fin (si plusieurs jours)</label>
+          <label for=\"ae-date-end\">Date de fin (si plusieurs jours)</label>
           <input type="date" id="ae-date-end">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Heure de début <span class="req">*</span></label>
+          <label for="ae-time-start">Heure de début <span class="req">*</span></label>
           <input type="time" id="ae-time-start">
         </div>
         <div class="form-group">
-          <label>Heure de fin <span class="req">*</span></label>
+          <label for="ae-time-end">Heure de fin <span class="req">*</span></label>
           <input type="time" id="ae-time-end">
         </div>
       </div>
       <div class="form-group">
-        <label>Lieu <span class="req">*</span></label>
+        <label for="ae-lieu">Lieu <span class="req">*</span></label>
         <input type="text" id="ae-lieu" placeholder="Ex : Dojo du club, Bons-en-Chablais">
       </div>
       <div class="admin-form-section">Tarif & places</div>
       <div class="form-row">
         <div class="form-group">
-          <label>Prix (€) — 0 = gratuit <span class="req">*</span></label>
+          <label for="ae-price">Prix (€) — 0 = gratuit <span class="req">*</span></label>
           <input type="number" id="ae-price" min="0" step="1" placeholder="0">
         </div>
         <div class="form-group">
-          <label>Nombre de places disponibles <span class="req">*</span></label>
+          <label for="ae-spots">Nombre de places disponibles <span class="req">*</span></label>
           <input type="number" id="ae-spots" min="0" step="1" placeholder="20">
         </div>
       </div>
       <div class="admin-form-section">Statut & options</div>
       <div class="form-group">
-        <label>Statut</label>
+        <label for=\"ae-status-group\">Statut</label>
         <div class="admin-toggle-group" id="ae-status-group">
           <button class="admin-toggle-btn active" data-val="disponible" onclick="selectToggle('ae-status-group',this)">Disponible</button>
           <button class="admin-toggle-btn" data-val="complet" onclick="selectToggle('ae-status-group',this)">Complet</button>
@@ -646,7 +646,7 @@ footer span{color:#888}
         </div>
       </div>
       <div class="form-group" id="ae-ha-url-group" style="display:none;margin-top:.5rem">
-        <label>URL HelloAsso</label>
+        <label for=\"ae-helloasso-url\">URL HelloAsso</label>
         <input type="url" id="ae-helloasso-url" placeholder="https://www.helloasso.com/associations/...">
       </div>
     </div>
@@ -885,7 +885,7 @@ function showSuccess() {
     reglement_ok:      document.getElementById('f-reglement').checked
   };
 
-const emailMsg = (CONFIG.BREVO_API_KEY && email)
+  const emailMsg = (CONFIG.BREVO_API_KEY && email)
     ? `Un email de confirmation a été envoyé à <strong>${email}</strong>.`
     : `Notez bien votre inscription. Aucun email de confirmation n'est configuré.`;
 
