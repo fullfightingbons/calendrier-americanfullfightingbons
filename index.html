@@ -1442,14 +1442,23 @@ async function loadHeroCalendar() {
   const footer = document.getElementById('hero-cal-updated');
 
   try {
-    if (!adminEvents || adminEvents.length === 0) {
+    // Utilise adminEvents déjà chargé par initPage (évite un fetch bloquant)
+    const evtList = adminEvents && adminEvents.length > 0 ? adminEvents : [];
+
+    if (evtList.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Aucun événement à venir pour le moment.</div></td></tr>`;
       countBadge.textContent = '0 inscrit';
       return;
     }
 
+    // Récupérer le détail (avec registrations_count) pour chaque event
     const details = await Promise.all(
-      adminEvents.map(ev => API.get('/api/events/' + ev.id).catch(() => ev))
+      evtList.map(ev => API.get('/api/events/' + ev.id).catch(() => ({
+        ...ev,
+        date_start: ev.dateStart,
+        spots_left: ev.spots,
+        registrations_count: 0
+      })))
     );
 
     details.sort((a, b) => (a.date_start || '').localeCompare(b.date_start || ''));
@@ -1469,7 +1478,7 @@ async function loadHeroCalendar() {
       rows.push(`<tr>
         <td class="col-date">${dateStr}</td>
         <td class="col-event">${ev.title}</td>
-        <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">${count > 0 ? count + ' inscrit' + (count>1?'s':'') : 'Aucune inscription'}</td>
+        <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">${count > 0 ? count + ' inscrit' + (count > 1 ? 's' : '') : 'Aucune inscription'}</td>
         <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
       </tr>`);
     });
@@ -1477,6 +1486,10 @@ async function loadHeroCalendar() {
     tbody.innerHTML = rows.join('');
     countBadge.textContent = totalInscrits + ' inscrit' + (totalInscrits > 1 ? 's' : '');
     footer.textContent = 'Mis à jour le ' + new Date().toLocaleString('fr-FR');
+
+    if (API._token) {
+      enrichCalendarWithNames(details);
+    }
 
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Impossible de charger les inscriptions.</div></td></tr>`;
@@ -1890,8 +1903,6 @@ function buildCard(ev){
     </div>
   </div>`;
 }
-
-  
 </script>
 </body>
 </html>
