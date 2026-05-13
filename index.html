@@ -1628,7 +1628,7 @@ function renderConfigStatus(){
   const el=document.getElementById('admin-config-status');
   if(!el) return;
   const issues=[];
-  if(!CONFIG.BREVO_API_KEY) issues.push('Clé API Brevo non renseignée — les notifications email sont désactivées.');
+  // Brevo géré côté Worker Cloudflare — clé non requise dans le front-end
   // Token admin vérifié côté serveur (Cloudflare Worker) — aucun mot de passe en clair ici.
   if(issues.length===0){
     el.innerHTML=`<div style="background:#EAFAF1;border:1px solid #A9DFBF;border-radius:8px;padding:10px 16px;font-size:13px;color:#1E8449;display:flex;align-items:center;gap:8px">✅ <span>Configuration OK — email Brevo actif.</span></div>`;
