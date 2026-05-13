@@ -1171,8 +1171,8 @@ function buildCard(ev) {
   const priceTxt = ev.price === 0 ? '<span class="free">Gratuit</span>' : '<sup>€</sup>' + ev.price;
   const btnClass = sold ? 'disabled' : ev.price === 0 ? 'outline' : 'primary';
   const btnTxt = sold ? 'Complet' : "S'inscrire →";
-  const cardOnclick = sold ? '' : 'onclick="openModal(\'' + ev.id + '\')"';
-  const stopProp = sold ? '' : 'onclick="event.stopPropagation();openModal(\'' + ev.id + '\')"';
+  const cardOnclick = sold ? '' : `data-id="${ev.id}" onclick="openModal(this.dataset.id)"`;
+  const stopProp    = sold ? '' : `data-id="${ev.id}" onclick="event.stopPropagation();openModal(this.dataset.id)"`;
   const featured = ev.featured ? ' featured' : '';
   const opacity = sold ? ' style="opacity:.6;pointer-events:none;"' : '';
   const d = fmtDate(ev.dateStart, ev.dateEnd);
