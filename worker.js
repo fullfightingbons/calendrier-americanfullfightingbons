@@ -1863,6 +1863,118 @@ export default {
         });
         return json({ redirectUrl });
       }
+      // ══════════════════════════════════════════════════════════
+      //  WEBHOOK HELLOASSO
+      //  POST /api/webhook/helloasso
+      //  HelloAsso envoie un POST à cette URL à chaque événement
+      //  de paiement. On vérifie la signature HMAC-SHA256 si
+      //  HELLOASSO_WEBHOOK_SECRET est configuré, puis on met à
+      //  jour le statut de l'inscription correspondante.
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'webhook' && resId === 'helloasso' && method === 'POST') {
+
+        // ── Vérification de la signature (optionnelle mais recommandée) ──
+        if (env.HELLOASSO_WEBHOOK_SECRET) {
+          const signature = request.headers.get('X-HelloAsso-Signature') || '';
+          const rawBody   = await request.text();
+          // HMAC-SHA256 sur le corps brut
+          const key    = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(env.HELLOASSO_WEBHOOK_SECRET),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false, ['sign']
+          );
+          const mac    = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+          const hexMac = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
+          if (hexMac !== signature.toLowerCase()) {
+            console.warn('Webhook HelloAsso : signature invalide');
+            return json({ error: 'Signature invalide' }, 401);
+          }
+          // Parser le corps maintenant qu'on l'a déjà lu
+          var webhookBody = JSON.parse(rawBody);
+        } else {
+          var webhookBody = await request.json();
+        }
+
+        // ── Structure du payload HelloAsso ────────────────────────
+        // https://dev.helloasso.com/docs/notifications
+        // eventType: "Payment", "Order", "Form", …
+        // data.payer.email, data.order.formSlug, data.amount, data.id (= référence paiement)
+        const eventType = webhookBody.eventType;
+        const data      = webhookBody.data;
+
+        // On ne traite que les paiements réussis
+        if (eventType !== 'Payment' || !data) {
+          return json({ received: true, processed: false, reason: 'eventType ignoré' });
+        }
+
+        const haRef   = String(data.id || '');         // identifiant unique HelloAsso
+        const email   = data.payer?.email || '';
+        const amount  = Math.round((data.amount || 0) / 100); // centimes → euros
+
+        if (!haRef || !email) {
+          return json({ received: true, processed: false, reason: 'données insuffisantes' });
+        }
+
+        // ── Trouver l'inscription en attente correspondante ────────
+        // On cherche par email + montant + statut en_attente, en prenant la plus récente
+        const reg = await env.DB.prepare(`
+          SELECT r.id, r.event_id, r.nom, r.prenom, r.email, r.paiement_status, r.montant,
+                 e.title, e.price, e.date_start, e.lieu
+          FROM registrations r
+          JOIN events e ON e.id = r.event_id
+          WHERE r.email = ?
+            AND r.paiement_status = 'en_attente'
+            AND r.montant = ?
+          ORDER BY r.created_at DESC
+          LIMIT 1
+        `).bind(email, amount).first();
+
+        if (!reg) {
+          // Aucune inscription en attente trouvée — peut être un doublon de webhook
+          console.warn(`Webhook HA : aucune inscription en_attente pour email=${email} montant=${amount}`);
+          return json({ received: true, processed: false, reason: 'inscription introuvable ou déjà traitée' });
+        }
+
+        // ── Idempotence : vérifier que ce haRef n'a pas déjà été traité ─
+        const alreadyProcessed = await env.DB.prepare(
+          `SELECT id FROM registrations WHERE helloasso_ref = ? AND paiement_status = 'paye'`
+        ).bind(haRef).first();
+        if (alreadyProcessed) {
+          return json({ received: true, processed: false, reason: 'déjà traité' });
+        }
+
+        // ── Mettre à jour le statut → paye ────────────────────────
+        await env.DB.prepare(`
+          UPDATE registrations
+          SET paiement_status = 'paye', helloasso_ref = ?
+          WHERE id = ?
+        `).bind(haRef, reg.id).run();
+
+        // ── Décrémenter spots_left sur l'événement ────────────────
+        await env.DB.prepare(
+          `UPDATE events SET spots_left = MAX(0, spots_left - 1) WHERE id = ?`
+        ).bind(reg.event_id).run();
+
+        // ── Email de confirmation au participant ───────────────────
+        if (env.BREVO_API_KEY) {
+          const ev = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(reg.event_id).first();
+          if (ev) {
+            const regData = {
+              nom: reg.nom, prenom: reg.prenom, email: reg.email,
+              telephone: '', date_naissance: '',
+              categorie: null, niveau: null, licence_ffk: null, message: null,
+              is_mineur: 0, parent_nom: null, parent_prenom: null, parent_tel: null,
+              paiement_status: 'paye',
+            };
+            sendConfirmationEmails(env, { reg: regData, ev }).catch(e => console.error('Email webhook error:', e));
+          }
+        }
+
+        console.log(`Webhook HA traité : inscription #${reg.id} → paye (ref: ${haRef})`);
+        return json({ received: true, processed: true, registration_id: reg.id });
+      }
+
       // ── Route introuvable ─────────────────────────────────────
       return err('Route introuvable', 404);
 
