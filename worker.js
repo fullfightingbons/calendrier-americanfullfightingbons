@@ -887,7 +887,7 @@ function showSuccess() {
 
   const emailMsg = (CONFIG.BREVO_API_KEY && email)
     ? 'Un email de confirmation a été envoyé à <strong>' + email + '</strong>.'
-    : 'Notez bien votre inscription. Aucun email de confirmation n est configuré.';
+: 'Notez bien votre inscription. Aucun email de confirmation n est configuré.';
 
   document.querySelector('.modal-body').innerHTML =
     '<div class="success-screen">' +
