@@ -14,28 +14,10 @@ jobs:
   migrate:
     name: Migrate D1 schema
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install Wrangler
-        run: npm install -g wrangler
-
-      - name: Apply schema.sql to D1 (production)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: |
-          wrangler d1 execute calendrier-americanfullfightingbonsdb \
-            --file=schema.sql \
-            --remote
-
+      - name: Skip migration (applied manually)
+        run: echo "Migration applied manually via Cloudflare Dashboard"
+        
   # ════════════════════════════════════════════════════════════════
   #  JOB 2 : Déployer le Worker
   # ════════════════════════════════════════════════════════════════
