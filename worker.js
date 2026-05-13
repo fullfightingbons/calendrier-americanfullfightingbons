@@ -1122,6 +1122,21 @@ async function checkAdminLogin() {
   }
 }
 
+function openAdminPanel() {
+  document.getElementById('admin-panel').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderAdminList();
+  // Peupler le select événements dans le filtre inscriptions
+  const sel = document.getElementById('reg-filter-event');
+  sel.innerHTML = '<option value="">— Tous les événements —</option>';
+  adminEvents.forEach(ev => {
+    const opt = document.createElement('option');
+    opt.value = ev.id;
+    opt.textContent = ev.title;
+    sel.appendChild(opt);
+  });
+}
+
 function switchAdminTab(tab) {
   ['events', 'regs'].forEach(t => {
     document.getElementById('tab-' + t).classList.toggle('active', t === tab);
