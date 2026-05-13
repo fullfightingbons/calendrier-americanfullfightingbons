@@ -376,7 +376,7 @@ footer span{color:#888}
           <input type="email" id="f-email" placeholder="lea.dupont@example.fr">
         </div>
         <div class="form-group">
-          <label for=\"f-licence\">Numéro de licence fédérale</label>
+          <label for="f-licence">Numéro de licence fédérale</label>
           <input type="text" id="f-licence" placeholder="FFK-XXXXXXXX (si applicable)">
         </div>
         <div class="check-group" style="margin-top:.5rem">
@@ -425,7 +425,7 @@ footer span{color:#888}
           </div>
         </div>
         <div class="form-group">
-          <label for=\"f-niveau\">Niveau pratique</label>
+          <label for="f-niveau">Niveau pratique</label>
           <select id="f-niveau">
             <option value="">— Sélectionner —</option>
             <option>Débutant (moins d'1 an)</option>
@@ -1351,6 +1351,7 @@ async function saveEvent() {
     events[norm.id] = { title: norm.title, sub: buildSubText(norm), price: norm.price, helloasso: norm.helloasso, helloasso_url: norm.helloasso_url, isGrade: norm.isGrade };
     closeEventForm();
     renderAdminList();
+    rebuildPublicPage();
   } catch (e) { alert('Erreur lors de la sauvegarde : ' + e.message); }
 }
 
@@ -1407,8 +1408,8 @@ function buildCard(ev) {
   const priceTxt = ev.price === 0 ? '<span class="free">Gratuit</span>' : '<sup>€</sup>' + ev.price;
   const btnClass = sold ? 'disabled' : ev.price === 0 ? 'outline' : 'primary';
   const btnTxt = sold ? 'Complet' : "S'inscrire →";
-  const cardOnclick = sold ? '' : 'data-id="' + ev.id + '" onclick="openModal(this.dataset.id)"';
-  const stopProp    = sold ? '' : 'data-id="' + ev.id + '" onclick="event.stopPropagation();openModal(this.dataset.id)"';
+  const cardOnclick = sold ? '' : 'onclick="openModal(\'' + ev.id + '\')"';
+  const stopProp    = sold ? '' : 'onclick="event.stopPropagation();openModal(\'' + ev.id + '\')"';
   const featured = ev.featured ? ' featured' : '';
   const opacity = sold ? ' style="opacity:.6;pointer-events:none;"' : '';
   const d = fmtDate(ev.dateStart, ev.dateEnd);
