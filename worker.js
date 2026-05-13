@@ -887,7 +887,7 @@ function showSuccess() {
 
   const emailMsg = (CONFIG.BREVO_API_KEY && email)
     ? 'Un email de confirmation a été envoyé à <strong>' + email + '</strong>.'
-    : 'Notez bien votre inscription. Aucun email de confirmation ne sera envoyé.';
+    : "Notez bien votre inscription. Aucun email de confirmation n'est configuré.";
 
   document.querySelector('.modal-body').innerHTML =
     '<div class="success-screen">' +
@@ -1032,8 +1032,8 @@ function renderAdminList() {
       '<div class="admin-event-badges"><span class="admin-spots-badge ' + spotsClass + '">' + spotsTxt + '</span></div>' +
       '<div class="admin-price-tag">' + priceTxt + '</div>' +
       '<div class="admin-actions">' +
-      '<button class="admin-btn-edit" onclick="openEventForm(\'' + ev.id + '\')">✏ Modifier</button>' +
-      '<button class="admin-btn-del" onclick="askDelete(\'' + ev.id + '\')">🗑 Supprimer</button>' +
+      '<button class="admin-btn-edit" data-eid="' + ev.id + '" onclick="openEventForm(this.dataset.eid)">✏ Modifier</button>' +
+      '<button class="admin-btn-del" data-eid="' + ev.id + '" onclick="askDelete(this.dataset.eid)">🗑 Supprimer</button>' +
       '</div></div>';
   }).join('');
 }
