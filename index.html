@@ -78,6 +78,34 @@ transparent 60%);
 pointer-events:none;
 }
 
+/* HERO CALENDAR */
+.hero-inner{position:relative;z-index:1;max-width:900px;margin:0 auto;width:100%}
+.hero-top{margin-bottom:2.5rem}
+.hero-calendar{background:rgba(0,0,0,.55);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-lg);overflow:hidden}
+.hero-cal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.1)}
+.hero-cal-title{font-family:var(--font-display);font-size:16px;letter-spacing:1px;color:white}
+.hero-cal-badge{font-size:11px;font-weight:600;background:var(--red);color:white;padding:3px 10px;border-radius:20px}
+.hero-cal-table-wrap{overflow-x:auto}
+.hero-cal-table{width:100%;border-collapse:collapse;font-size:13px}
+.hero-cal-table th{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:10px 16px;text-align:left;white-space:nowrap;background:rgba(0,0,0,.2)}
+.hero-cal-table td{padding:9px 16px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.85);white-space:nowrap;vertical-align:middle}
+.hero-cal-table tr:hover td{background:rgba(255,255,255,.05)}
+.hero-cal-table .col-date{color:var(--gold);font-weight:600;font-size:12px}
+.hero-cal-table .col-event{color:white;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.hero-cal-table .col-name{color:rgba(255,255,255,.9)}
+.hero-cal-table .col-cat{font-size:11px;color:rgba(255,255,255,.5)}
+.hero-cal-table .col-status{font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;display:inline-block}
+.status-paye{background:rgba(39,174,96,.2);color:#2ecc71;border:1px solid rgba(46,204,113,.3)}
+.status-gratuit{background:rgba(52,152,219,.2);color:#74b9ff;border:1px solid rgba(52,152,219,.3)}
+.status-attente{background:rgba(243,156,18,.2);color:#f39c12;border:1px solid rgba(243,156,18,.3)}
+.hero-cal-empty{padding:2rem;text-align:center;color:rgba(255,255,255,.35);font-size:13px}
+.hero-cal-loading{padding:1.5rem;text-align:center;color:rgba(255,255,255,.35);font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
+.hero-cal-dot{width:6px;height:6px;background:var(--red);border-radius:50%;animation:cal-pulse 1.2s ease-in-out infinite}
+.hero-cal-dot:nth-child(2){animation-delay:.2s}
+.hero-cal-dot:nth-child(3){animation-delay:.4s}
+@keyframes cal-pulse{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.hero-cal-footer{padding:10px 20px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:rgba(255,255,255,.3);text-align:right}
+
 /* FILTERS */
 .filters-bar{background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 .filters-inner{max-width:900px;margin:0 auto;padding:0 2rem;display:flex;align-items:center;gap:8px;height:52px;overflow-x:auto}
@@ -282,6 +310,8 @@ footer span{color:#888}
   .modal-header{border-radius:0}
   .modal-event-title{font-size:22px}
   .payment-methods{grid-template-columns:1fr}
+  .hero-cal-table th:nth-child(4),.hero-cal-table td:nth-child(4){display:none}
+  .hero{padding:2.5rem 1rem}
 }
 </style>
 </head>
@@ -307,12 +337,44 @@ footer span{color:#888}
 
 <div class="hero">
   <div class="hero-inner">
-    <h1>ÉVÉNEMENTS<br><span>& STAGES</span></h1>
-    <p>Inscrivez-vous aux événements du club — stages, compétitions et séminaires.</p>
-    <div class="hero-tags">
-      <div class="hero-tag active">Inscription 100% en ligne</div>
-      <div class="hero-tag active">Paiement sécurisé</div>
-      <div class="hero-tag active">Confirmation instantanée</div>
+    <div class="hero-top">
+      <h1>ÉVÉNEMENTS<br><span>& STAGES</span></h1>
+      <p>Inscrivez-vous aux événements du club — stages, compétitions et séminaires.</p>
+      <div class="hero-tags">
+        <div class="hero-tag active">Inscription 100% en ligne</div>
+        <div class="hero-tag active">Paiement sécurisé</div>
+        <div class="hero-tag active">Confirmation instantanée</div>
+      </div>
+    </div>
+
+    <div class="hero-calendar">
+      <div class="hero-cal-header">
+        <div class="hero-cal-title">📋 INSCRITS — PROCHAINS ÉVÉNEMENTS</div>
+        <div class="hero-cal-badge" id="hero-cal-count">…</div>
+      </div>
+      <div class="hero-cal-table-wrap">
+        <table class="hero-cal-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Événement</th>
+              <th>Nom &amp; Prénom</th>
+              <th>Catégorie</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody id="hero-cal-body">
+            <tr><td colspan="5">
+              <div class="hero-cal-loading">
+                <div class="hero-cal-dot"></div>
+                <div class="hero-cal-dot"></div>
+                <div class="hero-cal-dot"></div>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hero-cal-footer" id="hero-cal-updated"></div>
     </div>
   </div>
 </div>
@@ -1232,7 +1294,7 @@ function showSuccess(){
     reglement_ok:    document.getElementById('f-reglement').checked
   };
   API.post('/api/registrations', payload)
-    .then(r => console.log('Inscription enregistrée en base, id:', r.id))
+    .then(r => { console.log('Inscription enregistrée en base, id:', r.id); loadHeroCalendar(); })
     .catch(e => console.warn('Erreur enregistrement inscription D1:', e));
 
   const d={nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now};
@@ -1369,6 +1431,160 @@ async function initPage() {
   } catch(e) {
     console.error('Impossible de charger les événements:', e);
   }
+  // Charger le calendrier des inscrits (public, sans token)
+  loadHeroCalendar();
+}
+
+/* ── Calendrier des inscrits dans le hero ── */
+async function loadHeroCalendar() {
+  const tbody = document.getElementById('hero-cal-body');
+  const countBadge = document.getElementById('hero-cal-count');
+  const footer = document.getElementById('hero-cal-updated');
+
+  try {
+    // On a besoin de la liste des événements (déjà chargée via adminEvents)
+    // et des inscriptions publiques (nom+prénom uniquement, pas de données sensibles)
+    // L'API /api/registrations requiert un token admin — on utilise donc
+    // /api/events/:id pour récupérer le nombre d'inscrits par événement,
+    // et on affiche le tableau événement par événement avec les inscrits
+    // (accessible via l'endpoint admin uniquement).
+    // Pour la vue publique, on affiche par événement : date, titre, nb inscrits, places restantes.
+
+    // Récupérer les événements frais
+    const evts = await API.get('/api/events');
+
+    if (!evts || evts.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Aucun événement à venir pour le moment.</div></td></tr>`;
+      countBadge.textContent = '0 inscrit';
+      return;
+    }
+
+    // Pour chaque événement, récupérer les inscrits via /api/events/:id (inclut registrations_count)
+    // et afficher une ligne synthétique par événement
+    // On récupère le détail (avec count) pour chaque event
+    const details = await Promise.all(
+      evts.map(ev => API.get('/api/events/' + ev.id).catch(() => ev))
+    );
+
+    // Trier par date
+    details.sort((a, b) => (a.date_start || '').localeCompare(b.date_start || ''));
+
+    const rows = [];
+    let totalInscrits = 0;
+
+    details.forEach(ev => {
+      const count = ev.registrations_count || 0;
+      totalInscrits += count;
+      const dateStr = ev.date_start
+        ? new Date(ev.date_start).toLocaleDateString('fr-FR', {day:'numeric',month:'short',year:'numeric'})
+        : '—';
+      const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
+      const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
+
+      if (count === 0) {
+        rows.push(`<tr>
+          <td class="col-date">${dateStr}</td>
+          <td class="col-event">${ev.title}</td>
+          <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">Aucune inscription</td>
+          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+        </tr>`);
+      } else {
+        // Ligne d'en-tête de l'événement avec le nombre d'inscrits
+        rows.push(`<tr style="background:rgba(225,6,0,.08)">
+          <td class="col-date">${dateStr}</td>
+          <td class="col-event" style="font-weight:700;color:white">${ev.title}</td>
+          <td class="col-name" style="color:rgba(255,255,255,.5);font-size:11px">${count} inscrit${count>1?'s':''}</td>
+          <td class="col-cat"></td>
+          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+        </tr>`);
+      }
+    });
+
+    tbody.innerHTML = rows.join('');
+    countBadge.textContent = totalInscrits + ' inscrit' + (totalInscrits > 1 ? 's' : '');
+    footer.textContent = 'Mis à jour le ' + new Date().toLocaleString('fr-FR');
+
+    // Si on a un token admin, on peut enrichir avec les vrais noms
+    if (API._token) {
+      enrichCalendarWithNames(details);
+    }
+
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Impossible de charger les inscriptions.</div></td></tr>`;
+    countBadge.textContent = '—';
+    console.warn('Erreur chargement calendrier hero:', e);
+  }
+}
+
+/* ── Enrichissement admin : affiche les noms réels ── */
+async function enrichCalendarWithNames(evtDetails) {
+  try {
+    const tbody = document.getElementById('hero-cal-body');
+    // Récupérer toutes les inscriptions (admin)
+    const regs = await fetch(CONFIG.API_URL + '/api/registrations', {
+      headers: { 'Authorization': 'Bearer ' + API._token }
+    }).then(r => r.ok ? r.json() : []);
+
+    if (!regs || regs.length === 0) return;
+
+    // Trier les inscriptions par date d'événement
+    const evtMap = {};
+    evtDetails.forEach(ev => { evtMap[ev.id] = ev; });
+
+    const regsByEvent = {};
+    regs.forEach(r => {
+      if (!regsByEvent[r.event_id]) regsByEvent[r.event_id] = [];
+      regsByEvent[r.event_id].push(r);
+    });
+
+    const evtsSorted = [...evtDetails].sort((a,b)=>(a.date_start||'').localeCompare(b.date_start||''));
+    const rows = [];
+    let total = 0;
+
+    evtsSorted.forEach(ev => {
+      const list = regsByEvent[ev.id] || [];
+      total += list.length;
+      const dateStr = ev.date_start
+        ? new Date(ev.date_start).toLocaleDateString('fr-FR', {day:'numeric',month:'short',year:'numeric'})
+        : '—';
+      const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
+      const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
+
+      if (list.length === 0) {
+        rows.push(`<tr>
+          <td class="col-date">${dateStr}</td>
+          <td class="col-event">${ev.title}</td>
+          <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">Aucune inscription</td>
+          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+        </tr>`);
+      } else {
+        // Ligne titre événement
+        rows.push(`<tr style="background:rgba(225,6,0,.1)">
+          <td class="col-date">${dateStr}</td>
+          <td class="col-event" style="font-weight:700;color:white" colspan="3">${ev.title} — <span style="color:var(--gold)">${list.length} inscrit${list.length>1?'s':''}</span></td>
+          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+        </tr>`);
+        // Lignes individuelles
+        list.forEach(reg => {
+          const payClass = reg.paiement_status === 'paye' ? 'status-paye' : reg.paiement_status === 'gratuit' ? 'status-gratuit' : 'status-attente';
+          const payLabel = reg.paiement_status === 'paye' ? 'Payé' : reg.paiement_status === 'gratuit' ? 'Gratuit' : 'En attente';
+          rows.push(`<tr>
+            <td class="col-date" style="color:rgba(255,255,255,.25);font-size:11px">↳</td>
+            <td class="col-event" style="color:rgba(255,255,255,.4);font-size:12px">${ev.title}</td>
+            <td class="col-name">${reg.nom} ${reg.prenom}</td>
+            <td class="col-cat">${reg.categorie || '—'}</td>
+            <td><span class="col-status ${payClass}">${payLabel}</span></td>
+          </tr>`);
+        });
+      }
+    });
+
+    tbody.innerHTML = rows.join('');
+    document.getElementById('hero-cal-count').textContent = total + ' inscrit' + (total > 1 ? 's' : '');
+    document.getElementById('hero-cal-updated').textContent = 'Vue admin — Mis à jour le ' + new Date().toLocaleString('fr-FR');
+  } catch(e) {
+    console.warn('Enrichissement calendrier échoué:', e);
+  }
 }
 
 // Normalise les champs D1 (snake_case) vers le format interne (camelCase)
@@ -1448,6 +1664,8 @@ function openAdminPanel(){
   document.body.style.overflow='hidden';
   renderConfigStatus();
   renderAdminList();
+  // Enrichir le calendrier hero avec les vrais noms
+  API.get('/api/events').then(evts => enrichCalendarWithNames(evts)).catch(()=>{});
 }
 function quitAdmin(){
   document.getElementById('admin-panel').classList.remove('open');
