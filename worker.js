@@ -37,6 +37,8 @@ const INDEX_HTML = `<!DOCTYPE html>
 
 --shadow-red:0 0 30px rgba(225,6,0,.25);
 --shadow-card:0 10px 40px rgba(0,0,0,.45);
+--mid:#444444;
+--bg:#f9f9f9;
 }
 /* HEADER */
 header{background:var(--dark);color:var(--white);padding:0 2rem}
@@ -621,7 +623,7 @@ footer span{color:#888}
       <input type="hidden" id="ae-id">
       <div class="admin-form-section">Informations générales</div>
       <div class="form-group">
-        <label for=\"ae-title\">Titre de l'événement <span class=\"req\">*</span></label>
+        <label for="ae-title">Titre de l'événement <span class="req">*</span></label>
         <input type="text" id="ae-title" placeholder="Ex : Stage Été — Frappe & Déplacement">
       </div>
       <div class="form-group">
@@ -644,7 +646,7 @@ footer span{color:#888}
           <input type="date" id="ae-date-start">
         </div>
         <div class="form-group">
-          <label for=\"ae-date-end\">Date de fin (si plusieurs jours)</label>
+          <label for="ae-date-end">Date de fin (si plusieurs jours)</label>
           <input type="date" id="ae-date-end">
         </div>
       </div>
@@ -675,7 +677,7 @@ footer span{color:#888}
       </div>
       <div class="admin-form-section">Statut & options</div>
       <div class="form-group">
-        <label for=\"ae-status-group\">Statut</label>
+        <label for="ae-status-group">Statut</label>
         <div class="admin-toggle-group" id="ae-status-group">
           <button class="admin-toggle-btn active" data-val="disponible" onclick="selectToggle('ae-status-group',this)">Disponible</button>
           <button class="admin-toggle-btn" data-val="complet" onclick="selectToggle('ae-status-group',this)">Complet</button>
@@ -701,7 +703,7 @@ footer span{color:#888}
         </div>
       </div>
       <div class="form-group" id="ae-ha-url-group" style="display:none;margin-top:.5rem">
-        <label for=\"ae-helloasso-url\">URL HelloAsso</label>
+        <label for="ae-helloasso-url">URL HelloAsso</label>
         <input type="url" id="ae-helloasso-url" placeholder="https://www.helloasso.com/associations/...">
       </div>
     </div>
@@ -792,7 +794,6 @@ function filterCards(type, btn) {
   btn.classList.add('active');
   document.querySelectorAll('.event-card').forEach(card => {
     if (type === 'tous') { card.style.display = ''; }
-    else if (type === 'gratuit') { card.style.display = card.querySelector('.free') ? '' : 'none'; }
     else { card.style.display = card.dataset.type && card.dataset.type.includes(type) ? '' : 'none'; }
   });
 }
@@ -927,9 +928,9 @@ function validateStep() {
   return true;
 }
 
-function nextStep() {
+async function nextStep() {
   if (!validateStep()) return;
-  if (currentStep === 4) { showSuccess(); return; }
+  if (currentStep === 4) { await showSuccess(); return; }
   currentStep++;
   updateStepUI();
   document.querySelector('.modal-body').scrollTop = 0;
@@ -939,7 +940,7 @@ function prevStep() {
   if (currentStep > 1) { currentStep--; updateStepUI(); }
 }
 
-function showSuccess() {
+async function showSuccess() {
   const nom        = (document.getElementById('f-nom').value || '').trim().toUpperCase();
   const prenom     = document.getElementById('f-prenom').value.trim() || '';
   const email      = document.getElementById('f-email').value.trim() || '';
@@ -982,6 +983,21 @@ function showSuccess() {
   const displayNom    = payload.nom || nom;
   const displayPrenom = payload.prenom || prenom;
 
+  // Enregistrer l'inscription et afficher l'écran de succès
+  const btnNext = document.getElementById('btn-next');
+  btnNext.disabled = true;
+  btnNext.textContent = 'Enregistrement…';
+  try {
+    const r = await API.post('/api/registrations', payload);
+    console.log('Inscription enregistrée, id:', r.id);
+  } catch (e) {
+    console.warn('Erreur D1:', e);
+    btnNext.disabled = false;
+    btnNext.textContent = "Confirmer l'inscription ✓";
+    alert("Une erreur est survenue lors de l'enregistrement : " + e.message + "\nVeuillez réessayer.");
+    return;
+  }
+
   document.querySelector('.modal-body').innerHTML =
     '<div class="success-screen">' +
       '<div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' +
@@ -998,10 +1014,6 @@ function showSuccess() {
     '</div>';
   document.querySelector('.modal-footer').style.display = 'none';
   document.getElementById('progress-fill').style.width = '100%';
-
-  API.post('/api/registrations', payload)
-    .then(r => console.log('Inscription enregistrée, id:', r.id))
-    .catch(e => console.warn('Erreur D1:', e));
 }
 
 async function sendBrevoNotification(d) {
@@ -1205,10 +1217,10 @@ function askDeleteReg(id) {
 async function doDeleteReg() {
   if (!pendingDeleteRegId) return;
   try {
+    // Sauvegarder la référence AVANT de filtrer le tableau
+    const reg = adminRegistrations.find(r => String(r.id) === String(pendingDeleteRegId));
     await API.adminDelete('/api/registrations/' + pendingDeleteRegId);
     adminRegistrations = adminRegistrations.filter(r => String(r.id) !== String(pendingDeleteRegId));
-    // Mettre à jour spots_left localement
-    const reg = adminRegistrations.find(r => String(r.id) === String(pendingDeleteRegId)); // already removed, get from old list
     document.getElementById('reg-count').textContent = adminRegistrations.length;
     pendingDeleteRegId = null;
     closeConfirm();
@@ -1229,8 +1241,10 @@ function quitAdmin() { document.getElementById('admin-panel').classList.remove('
 function fmtDate(d1, d2) {
   if (!d1) return '—';
   const opt = { day: 'numeric', month: 'long', year: 'numeric' };
-  const s = new Date(d1).toLocaleDateString('fr-FR', opt);
-  if (d2) { return s + ' – ' + new Date(d2).toLocaleDateString('fr-FR', opt); }
+  // Forcer le parsing en heure locale pour éviter le décalage UTC (ex: 2025-06-01 → 31 mai)
+  const parseLocal = d => { const [y,m,j] = d.split('-').map(Number); return new Date(y, m-1, j); };
+  const s = parseLocal(d1).toLocaleDateString('fr-FR', opt);
+  if (d2) { return s + ' – ' + parseLocal(d2).toLocaleDateString('fr-FR', opt); }
   return s;
 }
 
@@ -1324,7 +1338,7 @@ async function saveEvent() {
     date_start: dateStart, date_end: document.getElementById('ae-date-end').value || null,
     time_start: document.getElementById('ae-time-start').value || null, time_end: document.getElementById('ae-time-end').value || null,
     lieu, price: parseFloat(priceVal) || 0,
-    spots_total: spotsInt, spots_left: existingId ? undefined : spotsInt,
+    spots_total: spotsInt, spots_left: existingId ? null : spotsInt,
     status: statusBtn ? statusBtn.dataset.val : 'disponible',
     featured: document.getElementById('ae-featured').checked, is_grade: document.getElementById('ae-isGrade').checked,
     helloasso: document.getElementById('ae-helloasso').checked, helloasso_url: document.getElementById('ae-helloasso-url').value.trim() || null
@@ -1518,7 +1532,7 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   const CLUB_EMAIL = 'fullfightingbons@gmail.com';
   const CLUB_NAME  = 'American Full Fighting Bons-en-Chablais';
   const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
-  const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr    = (() => { const [y,m,j] = ev.date_start.split('-').map(Number); return new Date(y, m-1, j).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); })();
 
   // ── Email au participant ───────────────────────────────────
   const participantHtml = `
@@ -1689,6 +1703,12 @@ export default {
           requireAdmin();
           const body = await request.json();
           validateEvent(body);
+          // Si spots_left est null (édition), conserver la valeur actuelle en base
+          const currentEv = await env.DB.prepare(`SELECT spots_left FROM events WHERE id = ?`).bind(resId).first();
+          if (!currentEv) return err('Événement introuvable', 404);
+          const spotsLeft = body.spots_left !== null && body.spots_left !== undefined
+            ? body.spots_left
+            : currentEv.spots_left;
           await env.DB.prepare(`
             UPDATE events SET
               title = ?, sub = ?, type = ?, status = ?,
@@ -1701,7 +1721,7 @@ export default {
             body.date_start, body.date_end ?? null,
             body.time_start ?? null, body.time_end ?? null,
             body.lieu, body.price ?? 0,
-            body.spots_total ?? 0, body.spots_left ?? body.spots_total ?? 0,
+            body.spots_total ?? 0, spotsLeft,
             body.featured  ? 1 : 0, body.is_grade  ? 1 : 0,
             body.helloasso ? 1 : 0, body.helloasso_url ?? null,
             resId,
@@ -1889,6 +1909,7 @@ export default {
       if (resource === 'webhook' && resId === 'helloasso' && method === 'POST') {
 
         // ── Vérification de la signature (optionnelle mais recommandée) ──
+        let webhookBody;
         if (env.HELLOASSO_WEBHOOK_SECRET) {
           const signature = request.headers.get('X-HelloAsso-Signature') || '';
           const rawBody   = await request.text();
@@ -1906,9 +1927,9 @@ export default {
             return json({ error: 'Signature invalide' }, 401);
           }
           // Parser le corps maintenant qu'on l'a déjà lu
-          var webhookBody = JSON.parse(rawBody);
+          webhookBody = JSON.parse(rawBody);
         } else {
-          var webhookBody = await request.json();
+          webhookBody = await request.json();
         }
 
         // ── Structure du payload HelloAsso ────────────────────────
