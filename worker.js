@@ -885,9 +885,7 @@ function showSuccess() {
     reglement_ok:      document.getElementById('f-reglement').checked
   };
 
-  const emailMsg = (CONFIG.BREVO_API_KEY && email)
-    ? 'Un email de confirmation a été envoyé à <strong>' + email + '</strong>.'
-    : "Notez bien votre inscription. Aucun email de confirmation n'est configuré.";
+  const emailMsg = 'Un email de confirmation va vous être envoyé à <strong>' + email + '</strong>.';
 
   document.querySelector('.modal-body').innerHTML =
     '<div class="success-screen">' +
@@ -909,11 +907,6 @@ function showSuccess() {
     .then(r => console.log('Inscription enregistrée, id:', r.id))
     .catch(e => console.warn('Erreur D1:', e));
 
-  const d = { nom, prenom, email, tel, dob, cat, niveau, licence, message, prix, now };
-  if (CONFIG.BREVO_API_KEY) {
-    sendBrevoNotification(d);
-    if (email) sendConfirmationToParticipant(d);
-  }
 }
 
 async function sendBrevoNotification(d) {
@@ -1269,6 +1262,94 @@ async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom,
   return data.redirectUrl;
 }
 
+// ── Brevo — envoi d'email ──────────────────────────────────────
+async function sendBrevoEmail(env, { to, toName, subject, html }) {
+  if (!env.BREVO_API_KEY) return; // secret non configuré → skip silencieux
+  const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept':       'application/json',
+      'api-key':      env.BREVO_API_KEY,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender:  { name: 'American Full Fighting Bons-en-Chablais', email: 'fullfightingbons@gmail.com' },
+      to:      [{ email: to, name: toName }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+  if (!resp.ok) {
+    const e = await resp.json().catch(() => ({}));
+    console.error('Brevo error:', JSON.stringify(e));
+  }
+}
+
+async function sendConfirmationEmails(env, { reg, ev }) {
+  const CLUB_EMAIL = 'fullfightingbons@gmail.com';
+  const CLUB_NAME  = 'American Full Fighting Bons-en-Chablais';
+  const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
+  const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  // ── Email au participant ───────────────────────────────────
+  const participantHtml = `
+<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+  <div style="background:#050505;padding:20px 24px;border-radius:8px 8px 0 0;text-align:center">
+    <span style="font-family:sans-serif;font-size:22px;font-weight:900;letter-spacing:2px;color:#fff">AMERICAN FULL FIGHTING</span><br>
+    <span style="color:#aaa;font-size:13px">Bons-en-Chablais · FFK</span>
+  </div>
+  <div style="border:1px solid #eee;border-top:none;padding:28px 24px;border-radius:0 0 8px 8px">
+    <h2 style="color:#E10600;margin-top:0">✅ Inscription confirmée</h2>
+    <p>Bonjour <strong>${reg.prenom} ${reg.nom}</strong>,</p>
+    <p>Votre inscription à l'événement suivant a bien été enregistrée :</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Événement</td><td style="padding:8px 12px">${ev.title}</td></tr>
+      <tr><td style="padding:8px 12px;font-weight:600">Date</td><td style="padding:8px 12px">${dateStr}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Lieu</td><td style="padding:8px 12px">${ev.lieu}</td></tr>
+      <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700;color:#E10600">${prix}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut paiement</td><td style="padding:8px 12px">${reg.paiement_status === 'gratuit' ? '✓ Gratuit' : reg.paiement_status === 'paye' ? '✓ Payé' : '⏳ En attente'}</td></tr>
+    </table>
+    <p style="color:#666;font-size:13px">Pour toute question, répondez à cet email ou contactez-nous à <a href="mailto:${CLUB_EMAIL}">${CLUB_EMAIL}</a>.</p>
+    <p style="color:#666;font-size:13px">À bientôt sur le tatami 🥊</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+    <p style="color:#aaa;font-size:11px;text-align:center">${CLUB_NAME} · Saison 2025–2026</p>
+  </div>
+</body></html>`;
+
+  // ── Notification au club ───────────────────────────────────
+  const clubHtml = `
+<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#E10600">🥊 Nouvelle inscription — ${ev.title}</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Participant</td><td style="padding:8px 12px">${reg.prenom} ${reg.nom}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Email</td><td style="padding:8px 12px"><a href="mailto:${reg.email}">${reg.email}</a></td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Téléphone</td><td style="padding:8px 12px">${reg.telephone}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Date de naissance</td><td style="padding:8px 12px">${reg.date_naissance}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Catégorie</td><td style="padding:8px 12px">${reg.categorie || '—'}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Niveau</td><td style="padding:8px 12px">${reg.niveau || '—'}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Licence FFK</td><td style="padding:8px 12px">${reg.licence_ffk || '—'}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700">${prix}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut paiement</td><td style="padding:8px 12px">${reg.paiement_status}</td></tr>
+    ${reg.message ? `<tr><td style="padding:8px 12px;font-weight:600">Message</td><td style="padding:8px 12px">${reg.message}</td></tr>` : ''}
+    ${reg.is_mineur ? `<tr style="background:#fff3cd"><td style="padding:8px 12px;font-weight:600">⚠ Mineur</td><td style="padding:8px 12px">${reg.parent_prenom} ${reg.parent_nom} — ${reg.parent_tel}</td></tr>` : ''}
+  </table>
+</body></html>`;
+
+  // Envoi en parallèle, sans bloquer la réponse API
+  await Promise.allSettled([
+    sendBrevoEmail(env, {
+      to: reg.email, toName: `${reg.prenom} ${reg.nom}`,
+      subject: `✅ Inscription confirmée — ${ev.title}`,
+      html: participantHtml,
+    }),
+    sendBrevoEmail(env, {
+      to: CLUB_EMAIL, toName: CLUB_NAME,
+      subject: `🥊 Nouvelle inscription — ${ev.title} — ${reg.nom} ${reg.prenom}`,
+      html: clubHtml,
+    }),
+  ]);
+}
+
 // ══════════════════════════════════════════════════════════════
 //  WORKER PRINCIPAL
 //  Toutes les routes sont à l'intérieur du fetch()
@@ -1470,6 +1551,17 @@ export default {
             body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
             ev.price, paiementStatus, body.helloasso_ref ?? null,
           ).run();
+          const regData = {
+            nom: body.nom, prenom: body.prenom, email: body.email,
+            telephone: body.telephone, date_naissance: body.date_naissance,
+            categorie: body.categorie ?? null, niveau: body.niveau ?? null,
+            licence_ffk: body.licence_ffk ?? null, message: body.message ?? null,
+            is_mineur: body.is_mineur ? 1 : 0,
+            parent_nom: body.parent_nom ?? null, parent_prenom: body.parent_prenom ?? null, parent_tel: body.parent_tel ?? null,
+            paiement_status: paiementStatus,
+          };
+          // Envoi emails en arrière-plan (ne bloque pas la réponse)
+          env.BREVO_API_KEY && sendConfirmationEmails(env, { reg: regData, ev }).catch(e => console.error('Email error:', e));
           return json({ id: info.meta.last_row_id, event_id: body.event_id, paiement_status: paiementStatus, montant: ev.price }, 201);
         }
 
