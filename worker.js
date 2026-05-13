@@ -350,7 +350,7 @@ footer span{color:#888}
           <input type="email" id="f-email" placeholder="lea.dupont@example.fr">
         </div>
         <div class="form-group">
-          <label for="f-licence">Numéro de licence fédérale</label>
+          <label for=\"f-licence\">Numéro de licence fédérale</label>
           <input type="text" id="f-licence" placeholder="FFK-XXXXXXXX (si applicable)">
         </div>
         <div class="check-group" style="margin-top:.5rem">
@@ -399,7 +399,7 @@ footer span{color:#888}
           </div>
         </div>
         <div class="form-group">
-          <label for="f-niveau">Niveau pratique</label>
+          <label for=\"f-niveau\">Niveau pratique</label>
           <select id="f-niveau">
             <option value="">— Sélectionner —</option>
             <option>Débutant (moins d'1 an)</option>
@@ -566,7 +566,7 @@ footer span{color:#888}
       <input type="hidden" id="ae-id">
       <div class="admin-form-section">Informations générales</div>
       <div class="form-group">
-        <label for="ae-title">Titre de l'événement <span class=\"req\">*</span></label>
+        <label for=\"ae-title\">Titre de l'événement <span class=\"req\">*</span></label>
         <input type="text" id="ae-title" placeholder="Ex : Stage Été — Frappe & Déplacement">
       </div>
       <div class="form-group">
@@ -589,7 +589,7 @@ footer span{color:#888}
           <input type="date" id="ae-date-start">
         </div>
         <div class="form-group">
-          <label for="ae-date-end">Date de fin (si plusieurs jours)</label>
+          <label for=\"ae-date-end\">Date de fin (si plusieurs jours)</label>
           <input type="date" id="ae-date-end">
         </div>
       </div>
@@ -620,7 +620,7 @@ footer span{color:#888}
       </div>
       <div class="admin-form-section">Statut & options</div>
       <div class="form-group">
-        <label for="ae-status-group">Statut</label>
+        <label for=\"ae-status-group\">Statut</label>
         <div class="admin-toggle-group" id="ae-status-group">
           <button class="admin-toggle-btn active" data-val="disponible" onclick="selectToggle('ae-status-group',this)">Disponible</button>
           <button class="admin-toggle-btn" data-val="complet" onclick="selectToggle('ae-status-group',this)">Complet</button>
@@ -646,7 +646,7 @@ footer span{color:#888}
         </div>
       </div>
       <div class="form-group" id="ae-ha-url-group" style="display:none;margin-top:.5rem">
-        <label for="ae-helloasso-url">URL HelloAsso</label>
+        <label for=\"ae-helloasso-url\">URL HelloAsso</label>
         <input type="url" id="ae-helloasso-url" placeholder="https://www.helloasso.com/associations/...">
       </div>
     </div>
@@ -1001,9 +1001,8 @@ function quitAdmin() { document.getElementById('admin-panel').classList.remove('
 function fmtDate(d1, d2) {
   if (!d1) return '—';
   const opt = { day: 'numeric', month: 'long', year: 'numeric' };
-  const parseLocal = d => { const [y,m,j] = d.split('-').map(Number); return new Date(y, m-1, j); };
-  const s = parseLocal(d1).toLocaleDateString('fr-FR', opt);
-  if (d2) { return s + ' – ' + parseLocal(d2).toLocaleDateString('fr-FR', opt); }
+  const s = new Date(d1).toLocaleDateString('fr-FR', opt);
+  if (d2) { return s + ' – ' + new Date(d2).toLocaleDateString('fr-FR', opt); }
   return s;
 }
 
@@ -1110,7 +1109,6 @@ async function saveEvent() {
     events[norm.id] = { title: norm.title, sub: buildSubText(norm), price: norm.price, helloasso: norm.helloasso, helloasso_url: norm.helloasso_url, isGrade: norm.isGrade };
     closeEventForm();
     renderAdminList();
-    rebuildPublicPage();
   } catch (e) { alert('Erreur lors de la sauvegarde : ' + e.message); }
 }
 
@@ -1166,8 +1164,8 @@ function buildCard(ev) {
   const priceTxt = ev.price === 0 ? '<span class="free">Gratuit</span>' : '<sup>€</sup>' + ev.price;
   const btnClass = sold ? 'disabled' : ev.price === 0 ? 'outline' : 'primary';
   const btnTxt = sold ? 'Complet' : "S'inscrire →";
-  const cardOnclick = sold ? '' : 'onclick="openModal(\'' + ev.id + '\')"';
-  const stopProp    = sold ? '' : 'onclick="event.stopPropagation();openModal(\'' + ev.id + '\')"';
+  const cardOnclick = sold ? '' : 'data-id="' + ev.id + '" onclick="openModal(this.dataset.id)"';
+  const stopProp    = sold ? '' : 'data-id="' + ev.id + '" onclick="event.stopPropagation();openModal(this.dataset.id)"';
   const featured = ev.featured ? ' featured' : '';
   const opacity = sold ? ' style="opacity:.6;pointer-events:none;"' : '';
   const d = fmtDate(ev.dateStart, ev.dateEnd);
