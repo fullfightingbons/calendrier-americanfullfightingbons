@@ -95,7 +95,7 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      sender:  { name: 'American Full Fighting Bons-en-Chablais', email: 'fullfightingbons@gmail.com' },
+      sender:  { name: 'American Full Fighting Bons-en-Chablais', email: 'contact@americanfullfightingbons.fr' },
       to:      [{ email: to, name: toName }],
       subject,
       htmlContent: html,
