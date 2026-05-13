@@ -1442,31 +1442,16 @@ async function loadHeroCalendar() {
   const footer = document.getElementById('hero-cal-updated');
 
   try {
-    // On a besoin de la liste des événements (déjà chargée via adminEvents)
-    // et des inscriptions publiques (nom+prénom uniquement, pas de données sensibles)
-    // L'API /api/registrations requiert un token admin — on utilise donc
-    // /api/events/:id pour récupérer le nombre d'inscrits par événement,
-    // et on affiche le tableau événement par événement avec les inscrits
-    // (accessible via l'endpoint admin uniquement).
-    // Pour la vue publique, on affiche par événement : date, titre, nb inscrits, places restantes.
-
-    // Récupérer les événements frais
-    const evts = await API.get('/api/events');
-
-    if (!evts || evts.length === 0) {
+    if (!adminEvents || adminEvents.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Aucun événement à venir pour le moment.</div></td></tr>`;
       countBadge.textContent = '0 inscrit';
       return;
     }
 
-    // Pour chaque événement, récupérer les inscrits via /api/events/:id (inclut registrations_count)
-    // et afficher une ligne synthétique par événement
-    // On récupère le détail (avec count) pour chaque event
     const details = await Promise.all(
-      evts.map(ev => API.get('/api/events/' + ev.id).catch(() => ev))
+      adminEvents.map(ev => API.get('/api/events/' + ev.id).catch(() => ev))
     );
 
-    // Trier par date
     details.sort((a, b) => (a.date_start || '').localeCompare(b.date_start || ''));
 
     const rows = [];
@@ -1481,33 +1466,17 @@ async function loadHeroCalendar() {
       const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
       const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
 
-      if (count === 0) {
-        rows.push(`<tr>
-          <td class="col-date">${dateStr}</td>
-          <td class="col-event">${ev.title}</td>
-          <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">Aucune inscription</td>
-          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
-        </tr>`);
-      } else {
-        // Ligne d'en-tête de l'événement avec le nombre d'inscrits
-        rows.push(`<tr style="background:rgba(225,6,0,.08)">
-          <td class="col-date">${dateStr}</td>
-          <td class="col-event" style="font-weight:700;color:white">${ev.title}</td>
-          <td class="col-name" style="color:rgba(255,255,255,.5);font-size:11px">${count} inscrit${count>1?'s':''}</td>
-          <td class="col-cat"></td>
-          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
-        </tr>`);
-      }
+      rows.push(`<tr>
+        <td class="col-date">${dateStr}</td>
+        <td class="col-event">${ev.title}</td>
+        <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">${count > 0 ? count + ' inscrit' + (count>1?'s':'') : 'Aucune inscription'}</td>
+        <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+      </tr>`);
     });
 
     tbody.innerHTML = rows.join('');
     countBadge.textContent = totalInscrits + ' inscrit' + (totalInscrits > 1 ? 's' : '');
     footer.textContent = 'Mis à jour le ' + new Date().toLocaleString('fr-FR');
-
-    // Si on a un token admin, on peut enrichir avec les vrais noms
-    if (API._token) {
-      enrichCalendarWithNames(details);
-    }
 
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Impossible de charger les inscriptions.</div></td></tr>`;
