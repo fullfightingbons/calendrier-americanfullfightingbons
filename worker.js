@@ -403,10 +403,16 @@ export default {
             parent_nom: body.parent_nom ?? null, parent_prenom: body.parent_prenom ?? null, parent_tel: body.parent_tel ?? null,
             paiement_status: paiementStatus,
           };
-          env.BREVO_API_KEY && sendConfirmationEmails(env, { reg: regData, ev }).catch(e => console.error('Email error:', e));
-          return json({ id: info.meta.last_row_id, event_id: body.event_id, paiement_status: paiementStatus, montant: ev.price }, 201);
-        }
-
+         // Attendre l'envoi des emails AVANT de retourner la réponse
+if (env.BREVO_API_KEY) {
+  try {
+    await sendConfirmationEmails(env, { reg: regData, ev });
+  } catch(e) {
+    console.error('Email error:', e);
+  }
+}
+return json({ id: info.meta.last_row_id, event_id: body.event_id, paiement_status: paiementStatus, montant: ev.price }, 201);
+          
         // PUT /api/registrations/:id/status [admin]
         if (method === 'PUT' && resId && subRes === 'status') {
           requireAdmin();
