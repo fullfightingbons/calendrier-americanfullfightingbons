@@ -900,24 +900,31 @@ const typeColors  = { stage:'#2980B9', competition:'#C0392B', seminaire:'#2980B9
    Appelé au chargement si ?checkout=success|error dans l'URL
    ════════════════════════════════════════════════════ */
 async function handleCheckoutReturn() {
-  const params   = new URLSearchParams(window.location.search);
-  const status   = params.get('checkout');   // 'success' | 'error'
-  const regId    = params.get('reg_id');
-  const eventId  = params.get('event_id');
+  const params  = new URLSearchParams(window.location.search);
+  const status  = params.get('checkout');
+  const eventId = params.get('event_id');
 
-  if (!status || !regId) return;
+  if (!status) return;
 
-  // Nettoyer l'URL sans recharger la page
   window.history.replaceState({}, '', window.location.pathname);
 
   if (status === 'success') {
+    const raw = sessionStorage.getItem('pending_registration');
+    sessionStorage.removeItem('pending_registration');
+
+    if (!raw) {
+      showReturnError('Paiement validé mais données d\'inscription introuvables. Contactez le club.');
+      loadHeroCalendar();
+      return;
+    }
+
     try {
-      // Marquer automatiquement l'inscription comme payée
-      await API.setRegStatus(regId, 'paye');
-      // Afficher la confirmation
-      showReturnSuccess(regId, eventId);
+      const payload = JSON.parse(raw);
+      payload.paiement_status_override = 'paye';
+      const created = await API.post('/api/registrations', payload);
+      showReturnSuccess(created.id, eventId);
     } catch(e) {
-      showReturnError('Paiement reçu mais erreur lors de la confirmation. Contactez le club en citant votre numéro d\'inscription : ' + regId);
+      showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
     }
   } else if (status === 'error') {
     showReturnError('Le paiement a été annulé ou a échoué. Vous pouvez réessayer depuis la page événements.');
