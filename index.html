@@ -892,6 +892,9 @@ let events      = {};
 let adminEvents = [];
 let pendingDeleteId = null;
 
+// Empêche les doubles inscriptions gratuites
+let freeRegistrationSubmitting = false;
+
 const typeLabels  = { stage:'Stage', competition:'Compétition', seminaire:'Séminaire', grade:'Passage de grade' };
 const typeColors  = { stage:'#2980B9', competition:'#C0392B', seminaire:'#2980B9', grade:'#6C3483' };
 
@@ -1184,6 +1187,7 @@ function openModal(eventId) {
 }
 
 function closeModal() {
+  freeRegistrationSubmitting = false;
   document.getElementById('modal-overlay').classList.remove('open');
   document.body.style.overflow='';
 }
@@ -1347,6 +1351,20 @@ function prevStep() {
 
 /* ── showSuccess (événements GRATUITS uniquement) ─── */
 function showSuccess() {
+    // Empêche les doubles soumissions
+  if (freeRegistrationSubmitting) {
+    return;
+  }
+
+  freeRegistrationSubmitting = true;
+
+  // Désactive immédiatement le bouton
+  const btnNext = document.getElementById('btn-next');
+
+  if (btnNext) {
+    btnNext.disabled = true;
+    btnNext.textContent = 'Envoi en cours…';
+  }
   // Bloquer le bouton immédiatement pour éviter le double-clic
   const btnNext = document.getElementById('btn-next');
   if (btnNext) { btnNext.disabled = true; btnNext.textContent = 'Envoi en cours…'; }
@@ -1376,10 +1394,23 @@ function showSuccess() {
   document.getElementById('progress-fill').style.width='100%';
 
   // Enregistrement en base (gratuit → confirmé immédiatement)
-  API.post('/api/registrations', payload)
-    .then(r => { console.log('Inscription gratuite enregistrée, id:', r.id); loadHeroCalendar(); })
-    .catch(e => console.warn('Erreur enregistrement:', e));
-}
+ API.post('/api/registrations', payload)
+  .then(r => {
+    console.log('Inscription gratuite enregistrée, id:', r.id);
+    loadHeroCalendar();
+  })
+  .catch(e => {
+
+    console.warn('Erreur enregistrement:', e);
+
+    // Réautorise l'envoi uniquement si erreur
+    freeRegistrationSubmitting = false;
+
+    if (btnNext) {
+      btnNext.disabled = false;
+      btnNext.textContent = 'Confirmer l\'inscription ✓';
+    }
+  });
 
 document.getElementById('f-mineur').addEventListener('change', function(){
   document.getElementById('mineur-section').style.display = this.checked?'block':'none';
