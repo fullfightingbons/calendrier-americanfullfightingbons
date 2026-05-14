@@ -1322,6 +1322,10 @@ function prevStep() {
 
 /* ── showSuccess (événements GRATUITS uniquement) ─── */
 function showSuccess() {
+  // Bloquer le bouton immédiatement pour éviter le double-clic
+  const btnNext = document.getElementById('btn-next');
+  if (btnNext) { btnNext.disabled = true; btnNext.textContent = 'Envoi en cours…'; }
+
   // ── Collecter les données AVANT d'écraser le DOM ──
   const payload = collectFormPayload();
   const nom    = (document.getElementById('f-nom').value||'').toUpperCase();
