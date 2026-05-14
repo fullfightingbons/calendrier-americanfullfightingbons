@@ -347,7 +347,7 @@ export default {
           const params = [];
           if (eventFilter)  { query += ` AND r.event_id = ?`;        params.push(eventFilter); }
           if (statusFilter) { query += ` AND r.paiement_status = ?`; params.push(statusFilter); }
-          query += ` ORDER BY r.created_at DESC`;
+          query += ` ORDER BY e.date_start ASC, r.created_at ASC`;
           const stmt = env.DB.prepare(query);
           const { results } = await (params.length ? stmt.bind(...params) : stmt).all();
           return json(results);
