@@ -90,7 +90,7 @@ async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom,
 async function sendBrevoEmail(env, { to, toName, subject, html }) {
   if (!env.BREVO_API_KEY) {
     console.error('BREVO: clé API manquante — emails non envoyés');
-    return;
+    return { ok: false, error: 'missing_api_key' };
   }
   console.log('BREVO: tentative envoi à', to, '| sujet:', subject);
   try {
@@ -111,11 +111,14 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
     const body = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       console.error('BREVO: erreur HTTP', resp.status, JSON.stringify(body));
+      return { ok: false, status: resp.status, body };
     } else {
       console.log('BREVO: succès', resp.status, JSON.stringify(body));
+      return { ok: true, status: resp.status, body };
     }
   } catch(e) {
     console.error('BREVO: exception réseau', e.message);
+    return { ok: false, error: e.message };
   }
 }
 
@@ -124,6 +127,19 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   const CLUB_NAME  = 'American Full Fighting Bons-en-Chablais';
   const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
   const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const isConfirmed = reg.paiement_status === 'gratuit' || reg.paiement_status === 'paye';
+  const participantTitle = isConfirmed ? '✅ Inscription confirmée' : '⏳ Inscription enregistrée';
+  const participantIntro = isConfirmed
+    ? 'Votre inscription à l\'événement suivant a bien été confirmée :'
+    : 'Votre demande d\'inscription a bien été enregistrée. Le paiement ou le dossier doit encore être vérifié pour finaliser votre participation :';
+  const participantStatus = reg.paiement_status === 'gratuit'
+    ? '✓ Gratuit'
+    : reg.paiement_status === 'paye'
+      ? '✓ Payé'
+      : '⏳ En attente de validation';
+  const participantSubject = isConfirmed
+    ? `✅ Inscription confirmée — ${ev.title}`
+    : `⏳ Inscription enregistrée — ${ev.title}`;
 
   const participantHtml = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
   <div style="background:#050505;padding:20px 24px;border-radius:8px 8px 0 0;text-align:center">
@@ -131,15 +147,15 @@ async function sendConfirmationEmails(env, { reg, ev }) {
     <span style="color:#aaa;font-size:13px">Bons-en-Chablais · FFK</span>
   </div>
   <div style="border:1px solid #eee;border-top:none;padding:28px 24px;border-radius:0 0 8px 8px">
-    <h2 style="color:#E10600;margin-top:0">✅ Inscription confirmée</h2>
+    <h2 style="color:#E10600;margin-top:0">${participantTitle}</h2>
     <p>Bonjour <strong>${reg.prenom} ${reg.nom}</strong>,</p>
-    <p>Votre inscription à l'événement suivant a bien été enregistrée :</p>
+    <p>${participantIntro}</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
       <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Événement</td><td style="padding:8px 12px">${ev.title}</td></tr>
       <tr><td style="padding:8px 12px;font-weight:600">Date</td><td style="padding:8px 12px">${dateStr}</td></tr>
       <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Lieu</td><td style="padding:8px 12px">${ev.lieu}</td></tr>
       <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700;color:#E10600">${prix}</td></tr>
-      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut paiement</td><td style="padding:8px 12px">${reg.paiement_status === 'gratuit' ? '✓ Gratuit' : reg.paiement_status === 'paye' ? '✓ Payé' : '⏳ En attente'}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut dossier</td><td style="padding:8px 12px">${participantStatus}</td></tr>
     </table>
     <p style="color:#666;font-size:13px">Pour toute question, contactez-nous à <a href="mailto:${CLUB_EMAIL}">${CLUB_EMAIL}</a>.</p>
     <p style="color:#666;font-size:13px">À bientôt sur le tatami 🥊</p>
@@ -163,10 +179,10 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   </table>
 </body></html>`;
 
-  await Promise.allSettled([
+  const [participantEmail, clubEmail] = await Promise.all([
     sendBrevoEmail(env, {
       to: reg.email, toName: `${reg.prenom} ${reg.nom}`,
-      subject: `✅ Inscription confirmée — ${ev.title}`,
+      subject: participantSubject,
       html: participantHtml,
     }),
     sendBrevoEmail(env, {
@@ -175,6 +191,8 @@ async function sendConfirmationEmails(env, { reg, ev }) {
       html: clubHtml,
     }),
   ]);
+
+  return { participant: participantEmail, club: clubEmail };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -187,7 +205,7 @@ export default {
     const method = request.method.toUpperCase();
 
     // ── Servir index.html depuis GitHub ───────────────────────
-    if (method === 'GET' && (path === '/' || path === '' || path === '/index.html')) {
+    if ((method === 'GET' || method === 'HEAD') && (path === '/' || path === '' || path === '/index.html')) {
       const htmlResp = await fetch(
         'https://raw.githubusercontent.com/fullfightingbons/calendrier-americanfullfightingbons/main/index.html',
         { cf: { cacheEverything: true, cacheTtl: 300 } }
@@ -373,10 +391,9 @@ export default {
           if (ev.status === 'complet') return err('Événement complet', 409);
           if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
 
-          // ── Modification : statut 'paye' direct si paiement HelloAsso confirmé ──
           const paiementStatus = ev.price === 0
             ? 'gratuit'
-            : (body.paiement_status_override === 'paye' ? 'paye' : 'en_attente');
+            : 'en_attente';
 
           const info = await env.DB.prepare(`
             INSERT INTO registrations (
@@ -420,14 +437,14 @@ export default {
             parent_nom: body.parent_nom ?? null, parent_prenom: body.parent_prenom ?? null, parent_tel: body.parent_tel ?? null,
             paiement_status: paiementStatus,
           };
-         // Attendre l'envoi des emails AVANT de retourner la réponse
-  try {
-    await sendConfirmationEmails(env, { reg: regData, ev });
-  } catch(e) {
-    console.error('Email error:', e);
-  
-}
-return json({ id: info.meta.last_row_id, event_id: body.event_id, paiement_status: paiementStatus, montant: ev.price }, 201);
+          const emailResults = await sendConfirmationEmails(env, { reg: regData, ev });
+          return json({
+            id: info.meta.last_row_id,
+            event_id: body.event_id,
+            paiement_status: paiementStatus,
+            montant: ev.price,
+            emails: emailResults,
+          }, 201);
           } 
           
         // PUT /api/registrations/:id/status [admin]

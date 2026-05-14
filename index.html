@@ -578,7 +578,7 @@ footer span{color:#888}
             </button>
             <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6">
               Vous allez être redirigé vers HelloAsso.<br>
-              <strong>La confirmation est automatique</strong> après paiement validé.
+              Après le paiement HelloAsso, votre inscription est enregistrée puis validée par le club.
             </p>
           </div>
 
@@ -877,17 +877,6 @@ const API = {
     });
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
-  },
-
-  // Mise à jour statut inscription (public — seul 'paye' est autorisé sans token)
-  async setRegStatus(regId, status, helloassoRef) {
-    const r = await fetch(CONFIG.API_URL + '/api/registrations/' + regId + '/status', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paiement_status: status, helloasso_ref: helloassoRef ?? null })
-    });
-    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
-    return r.json();
   }
 };
 
@@ -935,12 +924,10 @@ async function handleCheckoutReturn() {
     try {
       const payload = JSON.parse(raw);
 
-      payload.paiement_status_override = 'paye';
-
       // création UNIQUE de l'inscription
       const created = await API.post('/api/registrations', payload);
 
-      showReturnSuccess(created.id, eventId);
+      showReturnSuccess(created.id, eventId, created);
 
       // Autorise une future inscription
       sessionStorage.removeItem('checkout_processed');
@@ -962,10 +949,19 @@ async function handleCheckoutReturn() {
   loadHeroCalendar();
 }
 
-function showReturnSuccess(regId, eventId) {
+function showReturnSuccess(regId, eventId, created) {
   // Trouver le nom de l'événement si dispo
   const ev = adminEvents.find(e => e.id === eventId);
   const evTitle = ev ? ev.title : 'l\'événement';
+  const participantEmailSent = !!created?.emails?.participant?.ok;
+  const statusLabel = created?.paiement_status === 'gratuit'
+    ? 'Gratuit'
+    : created?.paiement_status === 'paye'
+      ? 'Payé'
+      : 'En attente de validation';
+  const helperText = participantEmailSent
+    ? 'Un email récapitulatif vous a été envoyé.'
+    : 'Si vous ne recevez pas d’email, contactez le club pour confirmation.';
 
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:5000;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)';
@@ -974,10 +970,11 @@ function showReturnSuccess(regId, eventId) {
       <div style="width:72px;height:72px;background:#f0fdf4;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem">
         <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px;color:#050505;margin-bottom:8px">PAIEMENT CONFIRMÉ</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px;color:#050505;margin-bottom:8px">INSCRIPTION ENREGISTRÉE</div>
       <p style="font-size:15px;color:#9b9b9b;line-height:1.6;margin-bottom:1.5rem">
-        Votre inscription à <strong style="color:#050505">${evTitle}</strong> est confirmée et votre paiement a bien été enregistré.<br>
-        Un email de confirmation vous a été envoyé.
+        Votre demande pour <strong style="color:#050505">${evTitle}</strong> a bien été enregistrée.<br>
+        Statut actuel : <strong style="color:#050505">${statusLabel}</strong>.<br>
+        ${helperText}
       </p>
       <div style="background:#f9f9f9;border-radius:12px;padding:12px 16px;font-size:13px;color:#9b9b9b;margin-bottom:1.5rem">
         Référence inscription : <strong style="color:#050505">#${regId}</strong>
@@ -1390,11 +1387,15 @@ function showSuccess() {
   API.post('/api/registrations', payload)
     .then(r => {
       console.log('Inscription gratuite enregistrée, id:', r.id);
+      const participantEmailSent = !!r?.emails?.participant?.ok;
+      const emailText = participantEmailSent
+        ? `Un email récapitulatif a été envoyé à <strong>${email}</strong>.`
+        : `L'inscription est enregistrée. Si vous ne recevez pas d’email, contactez le club.`;
       document.querySelector('.modal-body').innerHTML=`
         <div class="success-screen">
           <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
           <div class="success-title">INSCRIPTION VALIDÉE</div>
-          <p class="success-sub">Votre inscription à <strong>${currentEvent.title}</strong> a bien été enregistrée. Un email de confirmation vous a été envoyé à <strong>${email}</strong>.</p>
+          <p class="success-sub">Votre inscription à <strong>${currentEvent.title}</strong> a bien été enregistrée. ${emailText}</p>
           <div class="recap-card">
             <div class="recap-row"><span class="recap-label">Participant</span><span>${nom} ${prenom}</span></div>
             <div class="recap-row"><span class="recap-label">Événement</span><span>${currentEvent.title}</span></div>
@@ -1460,7 +1461,7 @@ async function checkAdminLogin() {
 function renderConfigStatus() {
   const el = document.getElementById('admin-config-status');
   if (!el) return;
-  el.innerHTML=`<div style="background:#EAFAF1;border:1px solid #A9DFBF;border-radius:8px;padding:10px 16px;font-size:13px;color:#1E8449;display:flex;align-items:center;gap:8px">✅ <span>Configuration OK — checkout HelloAsso automatique actif.</span></div>`;
+  el.innerHTML=`<div style="background:#EAFAF1;border:1px solid #A9DFBF;border-radius:8px;padding:10px 16px;font-size:13px;color:#1E8449;display:flex;align-items:center;gap:8px">✅ <span>Configuration OK — les inscriptions payantes sont enregistrées puis validées côté club.</span></div>`;
 }
 
 function openAdminPanel() {
