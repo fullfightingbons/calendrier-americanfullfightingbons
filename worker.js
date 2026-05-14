@@ -399,10 +399,17 @@ export default {
             ev.price, paiementStatus, body.helloasso_ref ?? null,
           ).run();
 
-          // Décrémenter spots_left
-          await env.DB.prepare(`
-            UPDATE events SET spots_left = MAX(0, spots_left - 1) WHERE id = ?
-          `).bind(body.event_id).run();
+          // Les inscriptions "paye"/"gratuit" décrémentent déjà les places
+          // via le trigger D1. On ne décrémente manuellement que "en_attente".
+          if (paiementStatus === 'en_attente') {
+            await env.DB.prepare(`
+              UPDATE events
+              SET
+                spots_left = MAX(0, spots_left - 1),
+                status = CASE WHEN spots_left - 1 <= 0 THEN 'complet' ELSE status END
+              WHERE id = ?
+            `).bind(body.event_id).run();
+          }
 
           const regData = {
             nom: body.nom, prenom: body.prenom, email: body.email,
