@@ -88,24 +88,34 @@ async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom,
 
 // ── Brevo — envoi d'email ──────────────────────────────────────
 async function sendBrevoEmail(env, { to, toName, subject, html }) {
-  if (!env.BREVO_API_KEY) return;
-  const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'accept':       'application/json',
-      'api-key':      env.BREVO_API_KEY,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender:  { name: 'American Full Fighting Bons-en-Chablais', email: 'contact@americanfullfightingbons.fr' },
-      to:      [{ email: to, name: toName }],
-      subject,
-      htmlContent: html,
-    }),
-  });
-  if (!resp.ok) {
-    const e = await resp.json().catch(() => ({}));
-    console.error('Brevo error:', JSON.stringify(e));
+  if (!env.BREVO_API_KEY) {
+    console.error('BREVO: clé API manquante — emails non envoyés');
+    return;
+  }
+  console.log('BREVO: tentative envoi à', to, '| sujet:', subject);
+  try {
+    const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept':       'application/json',
+        'api-key':      env.BREVO_API_KEY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender:  { name: 'American Full Fighting Bons-en-Chablais', email: 'contact@americanfullfightingbons.fr' },
+        to:      [{ email: to, name: toName }],
+        subject,
+        htmlContent: html,
+      }),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      console.error('BREVO: erreur HTTP', resp.status, JSON.stringify(body));
+    } else {
+      console.log('BREVO: succès', resp.status, JSON.stringify(body));
+    }
+  } catch(e) {
+    console.error('BREVO: exception réseau', e.message);
   }
 }
 
