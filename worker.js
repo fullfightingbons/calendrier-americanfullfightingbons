@@ -75,10 +75,12 @@ async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom,
       })
     }
   );
-  if (!resp.ok) {
-    const e = await resp.json();
-    console.error('HelloAsso checkout error:', e);
-    throw new ApiError('Erreur création checkout HelloAsso', 502);
+ if (!resp.ok) {
+    let e = {};
+    try { e = await resp.json(); } catch(_) {}
+    const detail = e?.message || e?.error || e?.errors?.[0]?.message || JSON.stringify(e);
+    console.error('HelloAsso checkout error:', JSON.stringify(e));
+    throw new ApiError('Erreur HelloAsso : ' + detail, 502);
   }
   const data = await resp.json();
   return data.redirectUrl;
