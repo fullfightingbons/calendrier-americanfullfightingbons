@@ -1534,9 +1534,9 @@ function exportCSV() {
   // Grouper les inscrits par événement
   const grouped = {};
   currentRegs.forEach(r => {
-    const key = r.event_id || r.event_title || 'inconnu';
-    if (!grouped[key]) {
-      const ev = adminEvents.find(e => e.id === r.event_id);
+    const key = String(r.event_id || r.event_title || 'inconnu');
+if (!grouped[key]) {
+  const ev = adminEvents.find(e => String(e.id) === String(r.event_id));
       grouped[key] = {
         title: r.event_title || 'Événement inconnu',
         date: ev ? (ev.dateStart || ev.date_start) : null,
