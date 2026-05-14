@@ -1220,7 +1220,7 @@ function setupPaymentStep() {
   }
 }
 
-/* ── openHelloAsso — crée l'inscription en base PUIS redirige ── */
+/* ── openHelloAsso — sauvegarde le payload PUIS redirige ── */
 async function openHelloAsso() {
   const btn     = document.getElementById('btn-open-helloasso');
   const loading = document.getElementById('ha-loading');
@@ -1231,20 +1231,16 @@ async function openHelloAsso() {
   errBox.style.display  = 'none';
 
   try {
-    // 1. Si pas encore créée, enregistrer l'inscription (statut en_attente)
-    if (!pendingRegId) {
-      const payload = collectFormPayload();
-      const created = await API.post('/api/registrations', payload);
-      pendingRegId  = created.id;
-    }
+    // 1. Collecter le payload et le sauvegarder avant de quitter la page
+    const payload = collectFormPayload();
+    sessionStorage.setItem('pending_registration', JSON.stringify(payload));
 
-    // 2. Créer la session HelloAsso checkout via le Worker
+    // 2. Créer la session HelloAsso checkout via le Worker (sans pré-enregistrer)
     const checkout = await API.post('/api/checkout', {
-      reg_id:   pendingRegId,
       event_id: currentEvent.id,
-      nom:      document.getElementById('f-nom').value.trim().toUpperCase(),
-      prenom:   document.getElementById('f-prenom').value.trim(),
-      email:    document.getElementById('f-email').value.trim(),
+      nom:      payload.nom,
+      prenom:   payload.prenom,
+      email:    payload.email,
     });
 
     // 3. Rediriger vers la page de paiement HelloAsso
