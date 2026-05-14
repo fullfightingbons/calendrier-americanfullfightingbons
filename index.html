@@ -1534,10 +1534,15 @@ function exportCSV() {
   // Grouper les inscrits par événement
   const grouped = {};
   currentRegs.forEach(r => {
-    const key = r.event_title || 'Événement inconnu';
+    const key = r.event_id || r.event_title || 'inconnu';
     if (!grouped[key]) {
-      const ev = adminEvents.find(e => e.title === key);
-grouped[key] = { date: ev ? (ev.dateStart || ev.date_start) : null, lieu: ev ? ev.lieu : '', regs: [] };
+      const ev = adminEvents.find(e => e.id === r.event_id);
+      grouped[key] = {
+        title: r.event_title || 'Événement inconnu',
+        date: ev ? (ev.dateStart || ev.date_start) : null,
+        lieu: ev ? ev.lieu : '',
+        regs: []
+      };
     }
     grouped[key].regs.push(r);
   });
@@ -1552,7 +1557,7 @@ grouped[key] = { date: ev ? (ev.dateStart || ev.date_start) : null, lieu: ev ? e
   const payLabels = { paye: 'Payé', gratuit: 'Gratuit', en_attente: 'En attente', annule: 'Annulé' };
   const payColors = { paye: '#22c55e', gratuit: '#60a5fa', en_attente: '#f59e0b', annule: '#9ca3af' };
 
-  const eventsHtml = sorted.map(([title, { date, lieu, regs }]) => {
+  const eventsHtml = sorted.map(([key, { title, date, lieu, regs }]) => {
     const dateStr = date
       ? new Date(date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
       : '—';
