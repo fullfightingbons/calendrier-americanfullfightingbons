@@ -1319,12 +1319,14 @@ function prevStep() {
 
 /* ── showSuccess (événements GRATUITS uniquement) ─── */
 function showSuccess() {
+  // ── Collecter les données AVANT d'écraser le DOM ──
+  const payload = collectFormPayload();
   const nom    = (document.getElementById('f-nom').value||'').toUpperCase();
   const prenom = document.getElementById('f-prenom').value||'';
   const email  = document.getElementById('f-email').value||'';
-  const tel    = document.getElementById('f-tel').value||'—';
 
   document.querySelector('.modal-body').innerHTML=`
+  
     <div class="success-screen">
       <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
       <div class="success-title">INSCRIPTION VALIDÉE</div>
@@ -1342,7 +1344,6 @@ function showSuccess() {
   document.getElementById('progress-fill').style.width='100%';
 
   // Enregistrement en base (gratuit → confirmé immédiatement)
-  const payload = collectFormPayload();
   API.post('/api/registrations', payload)
     .then(r => { console.log('Inscription gratuite enregistrée, id:', r.id); loadHeroCalendar(); })
     .catch(e => console.warn('Erreur enregistrement:', e));
