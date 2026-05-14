@@ -1162,6 +1162,7 @@ function filterCards(type, btn) {
 let currentEvent = null;
 let currentStep  = 1;
 let pendingRegId = null;   // ID de l'inscription créée en base avant le checkout
+let freeRegistrationSubmitting = false;
 
 function openModal(eventId) {
   currentEvent = events[eventId];
@@ -1351,23 +1352,21 @@ function prevStep() {
 
 /* ── showSuccess (événements GRATUITS uniquement) ─── */
 function showSuccess() {
-    // Empêche les doubles soumissions
+
+  // Empêche toute double exécution
   if (freeRegistrationSubmitting) {
     return;
   }
 
   freeRegistrationSubmitting = true;
 
-  // Désactive immédiatement le bouton
+  // Désactive le bouton immédiatement
   const btnNext = document.getElementById('btn-next');
 
   if (btnNext) {
     btnNext.disabled = true;
     btnNext.textContent = 'Envoi en cours…';
   }
-  // Bloquer le bouton immédiatement pour éviter le double-clic
-  const btnNext = document.getElementById('btn-next');
-  if (btnNext) { btnNext.disabled = true; btnNext.textContent = 'Envoi en cours…'; }
 
   // ── Collecter les données AVANT d'écraser le DOM ──
   const payload = collectFormPayload();
@@ -1396,14 +1395,17 @@ function showSuccess() {
   // Enregistrement en base (gratuit → confirmé immédiatement)
  API.post('/api/registrations', payload)
   .then(r => {
+
     console.log('Inscription gratuite enregistrée, id:', r.id);
+
     loadHeroCalendar();
   })
+
   .catch(e => {
 
     console.warn('Erreur enregistrement:', e);
 
-    // Réautorise l'envoi uniquement si erreur
+    // Réautorise un nouvel essai uniquement en cas d'erreur
     freeRegistrationSubmitting = false;
 
     if (btnNext) {
