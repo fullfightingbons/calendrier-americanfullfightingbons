@@ -908,64 +908,50 @@ async function handleCheckoutReturn() {
 
   window.history.replaceState({}, '', window.location.pathname);
 
-if (status === 'success') {
+  if (status === 'success') {
 
-  // Empêche un double traitement si l'utilisateur recharge la page
-  if (sessionStorage.getItem('checkout_processed')) {
-    return;
-  }
+    // Empêche un double traitement si l'utilisateur recharge la page
+    if (sessionStorage.getItem('checkout_processed')) {
+      return;
+    }
 
-  sessionStorage.setItem('checkout_processed', '1');
+    sessionStorage.setItem('checkout_processed', '1');
 
-  const raw = sessionStorage.getItem('pending_registration');
-  sessionStorage.removeItem('pending_registration');
+    const raw = sessionStorage.getItem('pending_registration');
+    sessionStorage.removeItem('pending_registration');
 
-  if (!raw) {
-    sessionStorage.removeItem('checkout_processed');
+    if (!raw) {
+      sessionStorage.removeItem('checkout_processed');
 
-    showReturnError('Paiement validé mais données d\'inscription introuvables. Contactez le club.');
-    loadHeroCalendar();
-    return;
-  }
+      showReturnError('Paiement validé mais données d\'inscription introuvables. Contactez le club.');
+      loadHeroCalendar();
+      return;
+    }
 
-  try {
-    const payload = JSON.parse(raw);
+    try {
+      const payload = JSON.parse(raw);
 
-    payload.paiement_status_override = 'paye';
+      payload.paiement_status_override = 'paye';
 
-    const created = await API.post('/api/registrations', payload);
+      // création UNIQUE de l'inscription
+      const created = await API.post('/api/registrations', payload);
 
-    showReturnSuccess(created.id, eventId);
+      showReturnSuccess(created.id, eventId);
 
-    // Autorise une future inscription
-    sessionStorage.removeItem('checkout_processed');
+      // Autorise une future inscription
+      sessionStorage.removeItem('checkout_processed');
 
-  } catch(e) {
+    } catch(e) {
 
-    console.error(e);
+      console.error(e);
 
-    sessionStorage.removeItem('checkout_processed');
+      sessionStorage.removeItem('checkout_processed');
 
-    showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
-  }
-}
+      showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
+    }
 
-  try {
-    const payload = JSON.parse(raw);
+  } else if (status === 'error') {
 
-    // paiement confirmé
-    payload.paiement_status_override = 'paye';
-
-    // création UNIQUE de l'inscription
-    const created = await API.post('/api/registrations', payload);
-
-    showReturnSuccess(created.id, eventId);
-
-  } catch(e) {
-    console.error(e);
-    showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
-  }
-} else if (status === 'error') {
     showReturnError('Le paiement a été annulé ou a échoué. Vous pouvez réessayer depuis la page événements.');
   }
 
