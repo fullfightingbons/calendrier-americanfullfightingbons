@@ -892,6 +892,1907 @@ let events      = {};
 let adminEvents = [];
 let pendingDeleteId = null;
 
+const typeLabels  = { stage:'Stage', competition:'Compétition', seminaire:'Séminaire', grade:'Passage de grade' };
+const typeColors  = { stage:'#2980B9', competition:'#C0392B', seminaire:'#2980B9', grade:'#6C3483' };
+
+/* ════════════════════════════════════════════════════
+   GESTION DU RETOUR HELLOASSO
+   Appelé au chargement si ?checkout=success|error dans l'URL
+   ════════════════════════════════════════════════════ */
+async function handleCheckoutReturn() {
+  const params  = new URLSearchParams(window.location.search);
+  const status  = params.get('checkout');
+  const eventId = params.get('event_id');
+
+  if (!status) return;
+
+  window.history.replaceState({}, '', window.location.pathname);
+
+  if (status === 'success') {
+
+    // Empêche un double traitement si l'utilisateur recharge la page
+    if (sessionStorage.getItem('checkout_processed')) {
+      return;
+    }
+
+    sessionStorage.setItem('checkout_processed', '1');
+
+    const raw = sessionStorage.getItem('pending_registration');
+    sessionStorage.removeItem('pending_registration');
+
+    if (!raw) {
+      sessionStorage.removeItem('checkout_processed');
+
+      showReturnError('Paiement validé mais données d\'inscription introuvables. Contactez le club.');
+      loadHeroCalendar();
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(raw);
+
+      payload.paiement_status_override = 'paye';
+
+      // création UNIQUE de l'inscription
+      const created = await API.post('/api/registrations', payload);
+
+      showReturnSuccess(created.id, eventId);
+
+      // Autorise une future inscription
+      sessionStorage.removeItem('checkout_processed');
+
+    } catch(e) {
+
+      console.error(e);
+
+      sessionStorage.removeItem('checkout_processed');
+
+      showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
+    }
+
+  } else if (status === 'error') {
+
+    showReturnError('Le paiement a été annulé ou a échoué. Vous pouvez réessayer depuis la page événements.');
+  }
+
+  loadHeroCalendar();
+}
+
+function showReturnSuccess(regId, eventId) {
+  // Trouver le nom de l'événement si dispo
+  const ev = adminEvents.find(e => e.id === eventId);
+  const evTitle = ev ? ev.title : 'l\'événement';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:5000;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)';
+  box.innerHTML = `
+    <div style="background:white;border-radius:28px;max-width:480px;width:100%;padding:2.5rem 2rem;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.25)">
+      <div style="width:72px;height:72px;background:#f0fdf4;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px;color:#050505;margin-bottom:8px">PAIEMENT CONFIRMÉ</div>
+      <p style="font-size:15px;color:#9b9b9b;line-height:1.6;margin-bottom:1.5rem">
+        Votre inscription à <strong style="color:#050505">${evTitle}</strong> est confirmée et votre paiement a bien été enregistré.<br>
+        Un email de confirmation vous a été envoyé.
+      </p>
+      <div style="background:#f9f9f9;border-radius:12px;padding:12px 16px;font-size:13px;color:#9b9b9b;margin-bottom:1.5rem">
+        Référence inscription : <strong style="color:#050505">#${regId}</strong>
+      </div>
+      <button onclick="this.closest('div[style]').remove()"
+        style="font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;padding:12px 32px;border-radius:8px;border:none;background:#E10600;color:white;cursor:pointer;width:100%">
+        Fermer
+      </button>
+    </div>
+  `;
+  document.body.appendChild(box);
+}
+
+function showReturnError(msg) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:5000;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)';
+  box.innerHTML = `
+    <div style="background:white;border-radius:28px;max-width:480px;width:100%;padding:2.5rem 2rem;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.25)">
+      <div style="font-size:48px;margin-bottom:1rem">⚠️</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;margin-bottom:8px">PAIEMENT INCOMPLET</div>
+      <p style="font-size:14px;color:#9b9b9b;line-height:1.6;margin-bottom:1.5rem">${msg}</p>
+      <button onclick="this.closest('div[style]').remove()"
+        style="font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;padding:12px 32px;border-radius:8px;border:none;background:#242424;color:white;cursor:pointer;width:100%">
+        Fermer
+      </button>
+    </div>
+  `;
+  document.body.appendChild(box);
+}
+
+/* ── Init ───────────────────────────────────────────── */
+async function initPage() {
+  try {
+    const evts = await API.get('/api/events');
+    adminEvents = evts.map(normalizeEvent);
+    adminEvents.forEach(ev => {
+      events[ev.id] = {
+        id: ev.id, title: ev.title, sub: buildSubText(ev),
+        price: ev.price, isGrade: !!ev.isGrade
+      };
+    });
+    rebuildPublicPage();
+  } catch(e) {
+    console.error('Impossible de charger les événements:', e);
+    document.getElementById('events-grid').innerHTML =
+      `<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted)">Impossible de charger les événements. Vérifiez votre connexion.</div>`;
+  }
+  loadHeroCalendar();
+  // Gérer le retour HelloAsso APRÈS chargement des événements
+  await handleCheckoutReturn();
+}
+
+document.addEventListener('DOMContentLoaded', initPage);
+
+/* ── Calendrier hero ──────────────────────────────── */
+async function loadHeroCalendar() {
+  const tbody      = document.getElementById('hero-cal-body');
+  const countBadge = document.getElementById('hero-cal-count');
+  const footer     = document.getElementById('hero-cal-updated');
+
+  try {
+    const evtList = adminEvents && adminEvents.length > 0 ? adminEvents : [];
+    if (evtList.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Aucun événement à venir.</div></td></tr>`;
+      countBadge.textContent = '0 inscrit';
+      return;
+    }
+    const details = await Promise.all(
+      evtList.map(ev => API.get('/api/events/' + ev.id).catch(() => ({
+        ...ev, date_start: ev.dateStart, spots_left: ev.spots, registrations_count: 0
+      })))
+    );
+    details.sort((a,b) => (a.date_start||'').localeCompare(b.date_start||''));
+    let totalInscrits = 0;
+    const rows = details.map(ev => {
+      const count = ev.registrations_count || 0;
+      totalInscrits += count;
+      const dateStr = ev.date_start
+        ? new Date(ev.date_start).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})
+        : '—';
+      const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
+      const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
+      return `<tr>
+        <td class="col-date">${dateStr}</td>
+        <td class="col-event">${ev.title}</td>
+        <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">${count > 0 ? count + ' inscrit' + (count > 1 ? 's' : '') : 'Aucune inscription'}</td>
+        <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join('');
+    countBadge.textContent = totalInscrits + ' inscrit' + (totalInscrits > 1 ? 's' : '');
+    footer.textContent = 'Mis à jour le ' + new Date().toLocaleString('fr-FR');
+    if (API._token) enrichCalendarWithNames(details);
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="hero-cal-empty">Impossible de charger les inscriptions.</div></td></tr>`;
+    countBadge.textContent = '—';
+  }
+}
+
+async function enrichCalendarWithNames(evtDetails) {
+  try {
+    const tbody = document.getElementById('hero-cal-body');
+    const regs  = await fetch(CONFIG.API_URL + '/api/registrations', {
+      headers: { 'Authorization': 'Bearer ' + API._token }
+    }).then(r => r.ok ? r.json() : []);
+    if (!regs || regs.length === 0) return;
+    const regsByEvent = {};
+    regs.forEach(r => {
+      if (!regsByEvent[r.event_id]) regsByEvent[r.event_id] = [];
+      regsByEvent[r.event_id].push(r);
+    });
+    const evtsSorted = [...evtDetails].sort((a,b)=>(a.date_start||'').localeCompare(b.date_start||''));
+    const rows = [];
+    let total  = 0;
+    evtsSorted.forEach(ev => {
+      const list    = regsByEvent[ev.id] || [];
+      total        += list.length;
+      const dateStr = ev.date_start
+        ? new Date(ev.date_start).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})
+        : '—';
+      const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
+      const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
+      if (list.length === 0) {
+        rows.push(`<tr>
+          <td class="col-date">${dateStr}</td>
+          <td class="col-event">${ev.title}</td>
+          <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">Aucune inscription</td>
+          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+        </tr>`);
+      } else {
+        rows.push(`<tr style="background:rgba(225,6,0,.1)">
+          <td class="col-date">${dateStr}</td>
+          <td class="col-event" style="font-weight:700;color:white" colspan="3">${ev.title} — <span style="color:var(--gold)">${list.length} inscrit${list.length>1?'s':''}</span></td>
+          <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
+        </tr>`);
+        list.forEach(reg => {
+          const payClass = reg.paiement_status==='paye'?'status-paye':reg.paiement_status==='gratuit'?'status-gratuit':'status-attente';
+          const payLabel = reg.paiement_status==='paye'?'Payé':reg.paiement_status==='gratuit'?'Gratuit':'En attente';
+          rows.push(`<tr>
+            <td class="col-date" style="color:rgba(255,255,255,.25);font-size:11px">↳</td>
+            <td class="col-event" style="color:rgba(255,255,255,.4);font-size:12px">${ev.title}</td>
+            <td class="col-name">${reg.nom} ${reg.prenom}</td>
+            <td class="col-cat">${reg.categorie||'—'}</td>
+            <td><span class="col-status ${payClass}">${payLabel}</span></td>
+          </tr>`);
+        });
+      }
+    });
+    tbody.innerHTML = rows.join('');
+    document.getElementById('hero-cal-count').textContent = total + ' inscrit' + (total>1?'s':'');
+    document.getElementById('hero-cal-updated').textContent = 'Vue admin — Mis à jour le ' + new Date().toLocaleString('fr-FR');
+  } catch(e) { console.warn('Enrichissement calendrier échoué:', e); }
+}
+
+/* ── Normalisation ──────────────────────────────────── */
+function normalizeEvent(ev) {
+  return {
+    id: ev.id, title: ev.title, sub: ev.sub, type: ev.type,
+    status: ev.status,
+    dateStart:  ev.date_start,  dateEnd:   ev.date_end   || '',
+    timeStart:  ev.time_start || '', timeEnd: ev.time_end || '',
+    lieu:       ev.lieu,
+    price:      ev.price,
+    spots:      ev.spots_left,  spotsTotal: ev.spots_total,
+    featured:   !!ev.featured,  isGrade:    !!ev.is_grade,
+  };
+}
+
+/* ── Filters ────────────────────────────────────────── */
+function filterCards(type, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.event-card').forEach(card => {
+    if (type==='tous') card.style.display='';
+    else if (type==='gratuit') card.style.display=card.querySelector('.free')?'':'none';
+    else card.style.display=card.dataset.type&&card.dataset.type.includes(type)?'':'none';
+  });
+}
+
+/* ════════════════════════════════════════════════════
+   MODAL INSCRIPTION
+   ════════════════════════════════════════════════════ */
+let currentEvent = null;
+let currentStep  = 1;
+let pendingRegId = null;   // ID de l'inscription créée en base avant le checkout
+
+function openModal(eventId) {
+  currentEvent = events[eventId];
+  if (!currentEvent) return;
+  currentStep  = 1;
+  pendingRegId = null;
+  document.getElementById('modal-title').textContent = currentEvent.title;
+  document.getElementById('modal-sub').textContent   = currentEvent.sub;
+  ['f-nom','f-prenom','f-tel','f-email','f-licence','f-regime','f-message'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  ['f-dob'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-mineur','f-certif','f-reglement','f-image'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.checked=false;
+  });
+  document.getElementById('mineur-section').style.display='none';
+  document.getElementById('ha-loading').style.display='none';
+  document.getElementById('ha-error').style.display='none';
+  document.querySelector('.modal-footer').style.display='';
+  updateStepUI();
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+function maybeClose(e) {
+  if (e.target===document.getElementById('modal-overlay')) closeModal();
+}
+
+function updateStepUI() {
+  for (let i=1;i<=4;i++) {
+    document.getElementById('step-'+i)?.classList.toggle('active', i===currentStep);
+    document.getElementById('ps'+i)?.classList.toggle('active', i===currentStep);
+  }
+  document.getElementById('progress-fill').style.width = (currentStep/4*100)+'%';
+  document.getElementById('btn-back').style.visibility = currentStep>1?'visible':'hidden';
+  const btnNext = document.getElementById('btn-next');
+
+  // À l'étape 4 :
+  // - Gratuit → bouton "Confirmer l'inscription"
+  // - Payant  → bouton masqué (c'est le bouton HelloAsso qui agit)
+  if (currentStep === 4) {
+    if (currentEvent && currentEvent.price === 0) {
+      btnNext.textContent = 'Confirmer l\'inscription ✓';
+      btnNext.style.display = '';
+    } else {
+      btnNext.style.display = 'none';
+    }
+  } else {
+    btnNext.style.display = '';
+    btnNext.textContent = 'Continuer →';
+  }
+
+  document.getElementById('mineur-section').style.display = document.getElementById('f-mineur').checked?'block':'none';
+  const gradeSection = document.getElementById('grade-section');
+  if (gradeSection) gradeSection.style.display = (currentEvent&&currentEvent.isGrade)?'block':'none';
+  if (currentStep===3) buildSummary();
+  if (currentStep===4) setupPaymentStep();
+}
+
+function buildSummary() {
+  const nom    = (document.getElementById('f-nom').value||'—').toUpperCase();
+  const prenom = document.getElementById('f-prenom').value||'—';
+  const dob    = document.getElementById('f-dob').value||'—';
+  const email  = document.getElementById('f-email').value||'—';
+  const cat    = document.getElementById('f-categorie').value||'Non renseigné';
+  const prix   = currentEvent.price===0?'Gratuit':'€'+currentEvent.price;
+  document.getElementById('summary-content').innerHTML=`
+    <div class="summary-row"><span class="label">Événement</span><span>${currentEvent.title}</span></div>
+    <div class="summary-row"><span class="label">Participant</span><span>${nom} ${prenom}</span></div>
+    <div class="summary-row"><span class="label">Date de naissance</span><span>${dob}</span></div>
+    <div class="summary-row"><span class="label">Email</span><span>${email}</span></div>
+    <div class="summary-row"><span class="label">Catégorie</span><span>${cat}</span></div>
+    <div class="summary-row"><span class="label">Montant total</span><span style="font-weight:600;color:var(--red)">${prix}</span></div>
+  `;
+}
+
+function setupPaymentStep() {
+  const isFree = currentEvent.price === 0;
+  document.getElementById('paiement-free-msg').style.display  = isFree ? 'block' : 'none';
+  document.getElementById('paiement-options').style.display   = isFree ? 'none'  : 'block';
+  if (!isFree) {
+    document.getElementById('ha-montant-label').textContent = '€' + currentEvent.price;
+    document.getElementById('ha-loading').style.display = 'none';
+    document.getElementById('ha-error').style.display   = 'none';
+    document.getElementById('btn-open-helloasso').style.display = '';
+  }
+}
+
+/* ── openHelloAsso — sauvegarde le payload PUIS redirige ── */
+async function openHelloAsso() {
+  const btn     = document.getElementById('btn-open-helloasso');
+  const loading = document.getElementById('ha-loading');
+  const errBox  = document.getElementById('ha-error');
+
+  btn.style.display     = 'none';
+  loading.style.display = 'block';
+  errBox.style.display  = 'none';
+
+  try {
+    // 1. Collecter le payload et le sauvegarder avant de quitter la page
+    const payload = collectFormPayload();
+    sessionStorage.setItem('pending_registration', JSON.stringify(payload));
+
+    // 2. Créer la session HelloAsso checkout via le Worker (sans pré-enregistrer)
+    const checkout = await API.post('/api/checkout', {
+      event_id: currentEvent.id,
+      nom:      payload.nom,
+      prenom:   payload.prenom,
+      email:    payload.email,
+    });
+
+    // 3. Rediriger vers la page de paiement HelloAsso
+    window.location.href = checkout.redirectUrl;
+
+  } catch(e) {
+    loading.style.display = 'none';
+    btn.style.display     = '';
+    errBox.style.display  = 'block';
+    errBox.textContent    = 'Erreur : ' + e.message + ' — Réessayez ou contactez le club.';
+    console.error('Checkout error:', e);
+  }
+}
+
+/* ── Collecte des données du formulaire ─────────────── */
+function collectFormPayload() {
+  return {
+    event_id:          currentEvent.id,
+    nom:               document.getElementById('f-nom').value.trim().toUpperCase(),
+    prenom:            document.getElementById('f-prenom').value.trim(),
+    date_naissance:    document.getElementById('f-dob').value,
+    telephone:         document.getElementById('f-tel').value.trim(),
+    email:             document.getElementById('f-email').value.trim(),
+    licence_ffk:       document.getElementById('f-licence').value || null,
+    is_mineur:         document.getElementById('f-mineur').checked,
+    categorie:         document.getElementById('f-categorie').value || null,
+    niveau:            document.getElementById('f-niveau').value || null,
+    regime:            document.getElementById('f-regime').value || null,
+    ceinture_actuelle: currentEvent.isGrade ? document.getElementById('f-ceinture-actuelle').value || null : null,
+    ceinture_visee:    currentEvent.isGrade ? document.getElementById('f-ceinture-visee').value || null : null,
+    parent_nom:        document.getElementById('f-mineur').checked ? document.getElementById('f-parent-nom').value || null : null,
+    parent_prenom:     document.getElementById('f-mineur').checked ? document.getElementById('f-parent-prenom').value || null : null,
+    parent_tel:        document.getElementById('f-mineur').checked ? document.getElementById('f-parent-tel').value || null : null,
+    message:           document.getElementById('f-message').value || null,
+    certif_medical:    document.getElementById('f-certif').checked,
+    droit_image:       document.getElementById('f-image').checked,
+    reglement_ok:      document.getElementById('f-reglement').checked,
+  };
+}
+
+function validateStep() {
+  if (currentStep===1) {
+    const nom   = document.getElementById('f-nom').value.trim();
+    const prenom= document.getElementById('f-prenom').value.trim();
+    const dob   = document.getElementById('f-dob').value;
+    const tel   = document.getElementById('f-tel').value.trim();
+    const email = document.getElementById('f-email').value.trim();
+    if (!nom||!prenom||!dob||!tel||!email) { alert('Merci de remplir tous les champs obligatoires.'); return false; }
+    if (!email.includes('@')) { alert('Adresse email invalide.'); return false; }
+  }
+  if (currentStep===2 && !document.getElementById('f-certif').checked) {
+    alert('Vous devez certifier disposer d\'un certificat médical pour continuer.'); return false;
+  }
+  if (currentStep===3 && !document.getElementById('f-reglement').checked) {
+    alert('Vous devez accepter le règlement intérieur pour continuer.'); return false;
+  }
+  return true;
+}
+
+function nextStep() {
+  if (!validateStep()) return;
+  // Étape 4 : seuls les gratuits arrivent ici via le bouton "Continuer"
+  if (currentStep===4) { showSuccess(); return; }
+  currentStep++;
+  updateStepUI();
+  document.querySelector('.modal-body').scrollTop=0;
+}
+
+function prevStep() {
+  if (currentStep>1) { currentStep--; updateStepUI(); }
+}
+
+/* ── showSuccess (événements GRATUITS uniquement) ─── */
+function showSuccess() {
+  // Bloquer le bouton immédiatement pour éviter le double-clic
+  const btnNext = document.getElementById('btn-next');
+  if (btnNext) { btnNext.disabled = true; btnNext.textContent = 'Envoi en cours…'; }
+
+  // ── Collecter les données AVANT d'écraser le DOM ──
+  const payload = collectFormPayload();
+  const nom    = (document.getElementById('f-nom').value||'').toUpperCase();
+  const prenom = document.getElementById('f-prenom').value||'';
+  const email  = document.getElementById('f-email').value||'';
+
+  document.querySelector('.modal-body').innerHTML=`
+  
+    <div class="success-screen">
+      <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="success-title">INSCRIPTION VALIDÉE</div>
+      <p class="success-sub">Votre inscription à <strong>${currentEvent.title}</strong> a bien été enregistrée. Un email de confirmation vous a été envoyé à <strong>${email}</strong>.</p>
+      <div class="recap-card">
+        <div class="recap-row"><span class="recap-label">Participant</span><span>${nom} ${prenom}</span></div>
+        <div class="recap-row"><span class="recap-label">Événement</span><span>${currentEvent.title}</span></div>
+        <div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">Gratuit</span></div>
+        <div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>
+      </div>
+      <button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>
+    </div>
+  `;
+  document.querySelector('.modal-footer').style.display='none';
+  document.getElementById('progress-fill').style.width='100%';
+
+  // Enregistrement en base (gratuit → confirmé immédiatement)
+  API.post('/api/registrations', payload)
+    .then(r => { console.log('Inscription gratuite enregistrée, id:', r.id); loadHeroCalendar(); })
+    .catch(e => console.warn('Erreur enregistrement:', e));
+}
+
+document.getElementById('f-mineur').addEventListener('change', function(){
+  document.getElementById('mineur-section').style.display = this.checked?'block':'none';
+});
+
+/* ════════════════════════════════════════════════════
+   ADMIN — LOGIN
+   ════════════════════════════════════════════════════ */
+function openAdminLogin() {
+  document.getElementById('admin-login-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('admin-pw').focus(), 100);
+}
+function closeAdminLogin() {
+  document.getElementById('admin-login-overlay').classList.remove('open');
+  document.getElementById('admin-pw').value='';
+  document.getElementById('login-error').style.display='none';
+}
+async function checkAdminLogin() {
+  const pw = document.getElementById('admin-pw').value.trim();
+  if (!pw) return;
+  try {
+    API._token = pw;
+    const r = await fetch(CONFIG.API_URL + '/api/registrations', {
+      headers: { 'Authorization': 'Bearer ' + pw }
+    });
+    if (!r.ok) throw new Error('unauthorized');
+    closeAdminLogin();
+    openAdminPanel();
+  } catch(e) {
+    API._token = null;
+    document.getElementById('login-error').style.display='block';
+    document.getElementById('admin-pw').value='';
+    document.getElementById('admin-pw').focus();
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   ADMIN — PANEL
+   ════════════════════════════════════════════════════ */
+function renderConfigStatus() {
+  const el = document.getElementById('admin-config-status');
+  if (!el) return;
+  el.innerHTML=`<div style="background:#EAFAF1;border:1px solid #A9DFBF;border-radius:8px;padding:10px 16px;font-size:13px;color:#1E8449;display:flex;align-items:center;gap:8px">✅ <span>Configuration OK — checkout HelloAsso automatique actif.</span></div>`;
+}
+
+function openAdminPanel() {
+  document.getElementById('admin-panel').classList.add('open');
+  document.body.style.overflow='hidden';
+  renderConfigStatus();
+  renderAdminList();
+  populateRegsEventSelect();
+  API.get('/api/events').then(evts => enrichCalendarWithNames(evts)).catch(()=>{});
+}
+
+function quitAdmin() {
+  document.getElementById('admin-panel').classList.remove('open');
+  document.body.style.overflow='';
+  rebuildPublicPage();
+}
+
+function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.admin-tab-content').forEach(c=>c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab==='registrations') loadRegistrations();
+}
+
+/* ════════════════════════════════════════════════════
+   ADMIN — INSCRIPTIONS
+   ════════════════════════════════════════════════════ */
+let currentRegs = [];
+
+function populateRegsEventSelect() {
+  const sel     = document.getElementById('regs-filter-event');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Tous les événements</option>' +
+    adminEvents.map(ev =>
+      `<option value="${ev.id}"${ev.id===current?' selected':''}>${ev.title}</option>`
+    ).join('');
+}
+
+async function loadRegistrations() {
+  const tbody   = document.getElementById('regs-tbody');
+  const evtSel  = document.getElementById('regs-filter-event').value;
+  const statSel = document.getElementById('regs-filter-status').value;
+  tbody.innerHTML = `<tr><td colspan="7" class="regs-loading">Chargement…</td></tr>`;
+  document.getElementById('regs-stats').innerHTML = '';
+  try {
+    let path = '/api/registrations';
+    const params = new URLSearchParams();
+    if (evtSel)  params.set('event_id', evtSel);
+    if (statSel) params.set('status',   statSel);
+    if ([...params].length) path += '?' + params.toString();
+    const regs = await fetch(CONFIG.API_URL + path, {
+      headers: { 'Authorization': 'Bearer ' + API._token }
+    }).then(r => { if (!r.ok) throw new Error('Erreur ' + r.status); return r.json(); });
+    currentRegs = regs;
+    renderRegsStats(regs);
+    renderRegsTable(regs);
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="regs-empty">Erreur de chargement : ${e.message}</td></tr>`;
+  }
+}
+
+function renderRegsStats(regs) {
+  const total     = regs.length;
+  const confirmes = regs.filter(r=>r.paiement_status==='paye'||r.paiement_status==='gratuit').length;
+  const attente   = regs.filter(r=>r.paiement_status==='en_attente').length;
+  const montant   = regs.filter(r=>r.paiement_status==='paye').reduce((s,r)=>s+(r.montant||0),0);
+  document.getElementById('regs-stats').innerHTML=`
+    <div class="regs-stat"><div class="regs-stat-num">${total}</div><div class="regs-stat-lbl">Inscriptions</div></div>
+    <div class="regs-stat"><div class="regs-stat-num" style="color:#1E8449">${confirmes}</div><div class="regs-stat-lbl">Confirmées</div></div>
+    <div class="regs-stat"><div class="regs-stat-num" style="color:#B7770D">${attente}</div><div class="regs-stat-lbl">En attente</div></div>
+    <div class="regs-stat"><div class="regs-stat-num" style="color:var(--red)">${montant} €</div><div class="regs-stat-lbl">Encaissé</div></div>
+  `;
+}
+
+function renderRegsTable(regs) {
+  const tbody = document.getElementById('regs-tbody');
+  if (regs.length===0) {
+    tbody.innerHTML=`<tr><td colspan="7" class="regs-empty">Aucune inscription trouvée.</td></tr>`;
+    return;
+  }
+  const payLabels  = { paye:'Payé', gratuit:'Gratuit', en_attente:'En attente', annule:'Annulé' };
+  const payClasses = { paye:'pay-paye', gratuit:'pay-gratuit', en_attente:'pay-attente', annule:'pay-annule' };
+  tbody.innerHTML = regs.map(r => `
+    <tr>
+      <td>
+        <div class="reg-name">${r.nom} ${r.prenom}</div>
+        <div class="reg-email">${r.email}</div>
+        ${r.is_mineur ? '<div style="font-size:11px;color:#B7770D;margin-top:2px">⚠ Mineur</div>' : ''}
+      </td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#555">${r.event_title||'—'}</td>
+      <td style="font-size:12px;color:var(--muted);white-space:nowrap">${r.date_naissance||'—'}</td>
+      <td style="font-size:12px;white-space:nowrap">${r.telephone||'—'}</td>
+      <td style="font-size:12px">${r.categorie||'—'}</td>
+      <td><span class="reg-pay ${payClasses[r.paiement_status]||''}">${payLabels[r.paiement_status]||r.paiement_status}</span></td>
+      <td><button class="btn-del-reg" onclick="askDeleteReg(${r.id},'${(r.nom+' '+r.prenom).replace(/'/g,"\\'")}')">🗑 Supprimer</button></td>
+    </tr>
+  `).join('');
+}
+
+function askDeleteReg(id, name) {
+  pendingDeleteId = 'reg_' + id;
+  document.getElementById('confirm-title').textContent = 'SUPPRIMER L\'INSCRIPTION ?';
+  document.getElementById('confirm-msg').textContent =
+    `Supprimer l'inscription de "${name}" ? La place sera automatiquement restituée sur l'événement. Cette action est irréversible.`;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-yes-btn').onclick = () => doDeleteReg(id);
+}
+
+async function doDeleteReg(id) {
+  try {
+    const result = await API.adminDelete('/api/registrations/' + id);
+    if (result.event_id) {
+      const ev = adminEvents.find(e=>e.id===result.event_id);
+      if (ev) {
+        ev.spots = (ev.spots||0) + 1;
+        if (ev.status==='complet') ev.status='disponible';
+        renderAdminList();
+        rebuildPublicPage();
+      }
+    }
+    closeConfirm();
+    await loadRegistrations();
+    loadHeroCalendar();
+  } catch(e) {
+    alert('Erreur lors de la suppression : ' + e.message);
+    closeConfirm();
+  }
+}
+
+function exportCSV() {
+  if (!currentRegs.length) { alert('Aucune inscription à exporter.'); return; }
+
+  // Grouper les inscrits par événement
+  const grouped = {};
+  currentRegs.forEach(r => {
+    const key = String(r.event_id || r.event_title || 'inconnu');
+if (!grouped[key]) {
+  const ev = adminEvents.find(e => String(e.id) === String(r.event_id));
+      grouped[key] = {
+        title: r.event_title || 'Événement inconnu',
+        date: ev ? (ev.dateStart || ev.date_start) : null,
+        lieu: ev ? ev.lieu : '',
+        regs: []
+      };
+    }
+    grouped[key].regs.push(r);
+  });
+
+  // Trier les événements par date
+  const sorted = Object.entries(grouped).sort((a, b) => {
+    if (!a[1].date) return 1;
+    if (!b[1].date) return -1;
+    return a[1].date.localeCompare(b[1].date);
+  });
+
+  const payLabels = { paye: 'Payé', gratuit: 'Gratuit', en_attente: 'En attente', annule: 'Annulé' };
+  const payColors = { paye: '#22c55e', gratuit: '#60a5fa', en_attente: '#f59e0b', annule: '#9ca3af' };
+
+  const eventsHtml = sorted.map(([key, { title, date, lieu, regs }]) => {
+    const dateStr = date
+      ? new Date(date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : '—';
+
+    const rows = regs.map((r, i) => `
+      <tr style="background:${i % 2 === 0 ? '#1a1a1a' : '#111'}">
+        <td style="padding:10px 16px;font-size:14px;font-weight:600;color:#f5f5f5;border-bottom:1px solid #222">${r.nom} ${r.prenom}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${r.email}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${r.telephone || '—'}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${r.categorie || '—'}</td>
+        <td style="padding:10px 16px;border-bottom:1px solid #222;text-align:center">
+          <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${payColors[r.paiement_status] || '#9ca3af'}22;color:${payColors[r.paiement_status] || '#9ca3af'};border:1px solid ${payColors[r.paiement_status] || '#9ca3af'}44">
+            ${payLabels[r.paiement_status] || r.paiement_status}
+          </span>
+        </td>
+      </tr>
+    `).join('');
+
+    return `
+      <div style="margin-bottom:32px;break-inside:avoid">
+        <div style="background:#E10600;padding:8px 20px;border-radius:8px 8px 0 0;display:flex;align-items:baseline;justify-content:space-between;gap:16px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:white">${title}</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:500;text-transform:capitalize;white-space:nowrap">${dateStr}${lieu ? ' · ' + lieu : ''}</div>
+        </div>
+        <div style="background:#0f0f0f;border:1px solid #242424;border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="background:#050505">
+                <th style="padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#666;text-align:left;border-bottom:1px solid #242424">Nom &amp; Prénom</th>
+                <th style="padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#666;text-align:left;border-bottom:1px solid #242424">Email</th>
+                <th style="padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#666;text-align:left;border-bottom:1px solid #242424">Téléphone</th>
+                <th style="padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#666;text-align:left;border-bottom:1px solid #242424">Catégorie</th>
+                <th style="padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#666;text-align:center;border-bottom:1px solid #242424">Paiement</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div style="padding:10px 16px;border-top:1px solid #1a1a1a;text-align:right">
+            <span style="font-size:12px;color:#555">${regs.length} inscrit${regs.length > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendrier des inscrits — American Full Fighting</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #050505; color: #f5f5f5; font-family: 'DM Sans', sans-serif; padding: 32px; }
+    @media print {
+      body { padding: 16px; }
+      @page { margin: 1cm; size: A4; }
+    }
+  </style>
+</head>
+<body>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid #E10600">
+    <div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;color:white;line-height:1">AMERICAN FULL FIGHTING</div>
+      <div style="font-size:13px;color:#9b9b9b;margin-top:4px">Bons-en-Chablais · FFK · Saison 2025–2026</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:#E10600;letter-spacing:1px">CALENDRIER DES INSCRITS</div>
+      <div style="font-size:12px;color:#666;margin-top:4px">Généré le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+      <div style="font-size:12px;color:#666">${currentRegs.length} inscription${currentRegs.length > 1 ? 's' : ''} au total</div>
+    </div>
+  </div>
+  ${eventsHtml}
+  <div style="margin-top:40px;padding-top:16px;border-top:1px solid #242424;display:flex;justify-content:space-between">
+    <span style="font-size:11px;color:#444">American Full Fighting Bons-en-Chablais · FFK</span>
+    <span style="font-size:11px;color:#444">Document confidentiel — usage interne</span>
+  </div>
+  <script>window.onload = function() { setTimeout(() => window.print(), 500); };<\/script>
+</body>
+</html>`);
+  printWindow.document.close();
+}
+
+/* ════════════════════════════════════════════════════
+   ADMIN — ÉVÉNEMENTS
+   ════════════════════════════════════════════════════ */
+function fmtDate(d1,d2) {
+  if (!d1) return '—';
+  const opt={day:'numeric',month:'long',year:'numeric'};
+  const s=new Date(d1).toLocaleDateString('fr-FR',opt);
+  if (d2) return s+' – '+new Date(d2).toLocaleDateString('fr-FR',opt);
+  return s;
+}
+
+function renderAdminList() {
+  const list=document.getElementById('admin-events-list');
+  document.getElementById('admin-event-count').textContent=adminEvents.length;
+  if (adminEvents.length===0) {
+    list.innerHTML=`<div class="admin-empty"><div class="admin-empty-icon">📭</div><div style="font-weight:600;margin-bottom:6px">Aucun événement</div><div style="font-size:14px">Créez votre premier événement avec le bouton ci-dessus.</div></div>`;
+    return;
+  }
+  list.innerHTML=adminEvents.map(ev=>{
+    const spotsClass=ev.spots===0?'spots-full':ev.spots<=5?'spots-low':'spots-ok';
+    const spotsTxt  =ev.spots===0?'Complet':ev.spots+' places';
+    const priceTxt  =ev.price===0?'Gratuit':'€'+ev.price;
+    return `<div class="admin-event-row${ev.status==='complet'?' sold-out':''}">
+      <div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>
+      <div class="admin-event-info">
+        <div class="admin-event-name">${ev.title}${ev.featured?' ⭐':''}</div>
+        <div class="admin-event-meta">${typeLabels[ev.type]||ev.type} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${ev.lieu}</div>
+      </div>
+      <div class="admin-event-badges"><span class="admin-spots-badge ${spotsClass}">${spotsTxt}</span></div>
+      <div class="admin-price-tag">${priceTxt}</div>
+      <div class="admin-actions">
+        <button class="admin-btn-edit" onclick="openEventForm('${ev.id}')">✏ Modifier</button>
+        <button class="admin-btn-del"  onclick="askDelete('${ev.id}')">🗑 Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openEventForm(id) {
+  const isNew=!id;
+  document.getElementById('admin-modal-title').textContent=isNew?'NOUVEL ÉVÉNEMENT':'MODIFIER L\'ÉVÉNEMENT';
+  ['ae-title','ae-sub','ae-date-start','ae-date-end','ae-time-start','ae-time-end','ae-lieu','ae-price','ae-spots'].forEach(f=>{
+    document.getElementById(f).value='';
+  });
+  document.getElementById('ae-id').value=id||'';
+  document.getElementById('ae-featured').checked=false;
+  document.getElementById('ae-isGrade').checked=false;
+  document.querySelectorAll('#ae-type-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('#ae-status-group [data-val="disponible"]').classList.add('active');
+
+  if (!isNew) {
+    const ev=adminEvents.find(e=>e.id===id);
+    if (!ev) return;
+    document.getElementById('ae-title').value      =ev.title;
+    document.getElementById('ae-sub').value        =ev.sub;
+    document.getElementById('ae-date-start').value =ev.dateStart||'';
+    document.getElementById('ae-date-end').value   =ev.dateEnd||'';
+    document.getElementById('ae-time-start').value =ev.timeStart||'';
+    document.getElementById('ae-time-end').value   =ev.timeEnd||'';
+    document.getElementById('ae-lieu').value       =ev.lieu||'';
+    document.getElementById('ae-price').value      =ev.price;
+    document.getElementById('ae-spots').value      =ev.spots;
+    document.getElementById('ae-featured').checked =!!ev.featured;
+    document.getElementById('ae-isGrade').checked  =!!ev.isGrade;
+    const typeBtn=document.querySelector(`#ae-type-group [data-val="${ev.type}"]`);
+    if (typeBtn) typeBtn.classList.add('active');
+    document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
+    const stBtn=document.querySelector(`#ae-status-group [data-val="${ev.status}"]`);
+    if (stBtn) stBtn.classList.add('active');
+  }
+  document.getElementById('admin-event-modal').classList.add('open');
+}
+
+function closeEventForm() {
+  document.getElementById('admin-event-modal').classList.remove('open');
+}
+
+function selectToggle(groupId, btn) {
+  document.querySelectorAll('#'+groupId+' .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function saveEvent() {
+  const title    =document.getElementById('ae-title').value.trim();
+  const sub      =document.getElementById('ae-sub').value.trim();
+  const dateStart=document.getElementById('ae-date-start').value;
+  const lieu     =document.getElementById('ae-lieu').value.trim();
+  const priceVal =document.getElementById('ae-price').value;
+  const spotsVal =document.getElementById('ae-spots').value;
+  const typeBtn  =document.querySelector('#ae-type-group .admin-toggle-btn.active');
+  if (!title||!sub||!dateStart||!lieu||priceVal===''||spotsVal==='') {
+    alert('Veuillez remplir tous les champs obligatoires.'); return;
+  }
+  if (!typeBtn) { alert('Veuillez sélectionner un type d\'événement.'); return; }
+  const statusBtn  =document.querySelector('#ae-status-group .admin-toggle-btn.active');
+  const existingId =document.getElementById('ae-id').value;
+  const spotsInt   =parseInt(spotsVal)||0;
+  const payload={
+    title, sub, type:typeBtn.dataset.val,
+    date_start:  dateStart,
+    date_end:    document.getElementById('ae-date-end').value||null,
+    time_start:  document.getElementById('ae-time-start').value||null,
+    time_end:    document.getElementById('ae-time-end').value||null,
+    lieu, price: parseFloat(priceVal)||0,
+    spots_total: spotsInt,
+    spots_left:  existingId ? undefined : spotsInt,
+    status:      statusBtn?statusBtn.dataset.val:'disponible',
+    featured:    document.getElementById('ae-featured').checked,
+    is_grade:    document.getElementById('ae-isGrade').checked,
+    helloasso:   parseFloat(priceVal) > 0, // activer automatiquement si payant
+    helloasso_url: null,
+  };
+  try {
+    let saved;
+    if (existingId) saved=await API.adminPut('/api/events/'+existingId,payload);
+    else            saved=await API.adminPost('/api/events',payload);
+    const norm=normalizeEvent(saved);
+    const idx =adminEvents.findIndex(e=>e.id===norm.id);
+    if (idx>=0) adminEvents[idx]=norm; else adminEvents.push(norm);
+    events[norm.id]={
+      id:norm.id, title:norm.title, sub:buildSubText(norm),
+      price:norm.price, isGrade:norm.isGrade
+    };
+    populateRegsEventSelect();
+    closeEventForm();
+    renderAdminList();
+    rebuildPublicPage();
+  } catch(e) {
+    alert('Erreur lors de la sauvegarde : '+e.message);
+  }
+}
+
+/* ── Suppression événement ──────────────────────────── */
+function askDelete(id) {
+  const ev=adminEvents.find(e=>e.id===id);
+  if (!ev) return;
+  pendingDeleteId=id;
+  document.getElementById('confirm-title').textContent='SUPPRIMER CET ÉVÉNEMENT ?';
+  document.getElementById('confirm-msg').textContent=`Voulez-vous vraiment supprimer "${ev.title}" ?`;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-yes-btn').onclick=()=>doDelete();
+}
+
+async function doDelete() {
+  if (!pendingDeleteId) return;
+  try {
+    await API.adminDelete('/api/events/'+pendingDeleteId);
+    adminEvents=adminEvents.filter(e=>e.id!==pendingDeleteId);
+    delete events[pendingDeleteId];
+    pendingDeleteId=null;
+    populateRegsEventSelect();
+    closeConfirm();
+    renderAdminList();
+    rebuildPublicPage();
+  } catch(e) {
+    alert('Erreur lors de la suppression : '+e.message);
+    closeConfirm();
+  }
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+function resetAdminEvents() {
+  if (!confirm('Réinitialiser la liste ? Cela rechargera les événements depuis la base.')) return;
+  initPage();
+}
+
+/* ── Page publique ──────────────────────────────────── */
+function buildSubText(ev) {
+  return `${typeLabels[ev.type]||ev.type} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${ev.lieu}`;
+}
+
+function rebuildPublicPage() {
+  const newEventsObj={};
+  adminEvents.forEach(ev=>{
+    newEventsObj[ev.id]={
+      id:ev.id, title:ev.title, sub:buildSubText(ev),
+      price:ev.price, isGrade:ev.isGrade
+    };
+  });
+  Object.assign(events,newEventsObj);
+  Object.keys(events).forEach(k=>{ if (!newEventsObj[k]) delete events[k]; });
+  document.getElementById('events-grid').innerHTML=adminEvents.length
+    ? adminEvents.map(ev=>buildCard(ev)).join('')
+    : `<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted)"><div style="font-size:32px;margin-bottom:8px">📅</div>Aucun événement pour le moment.</div>`;
+}
+
+function buildCard(ev) {
+  const typeBadge={
+    stage:       '<span class="badge badge-stage">Stage</span>',
+    competition: '<span class="badge badge-compet">Compétition</span>',
+    seminaire:   '<span class="badge badge-stage">Séminaire</span>',
+    grade:       '<span class="badge badge-grade">Passage de grade</span>'
+  }[ev.type]||'<span class="badge">Événement</span>';
+  const sold     =ev.status==='complet';
+  const low      =!sold&&ev.spots>0&&ev.spots<=5;
+  const spotsTxt =sold?'0 place disponible':low?`⚡ ${ev.spots} places restantes`:`${ev.spots} places`;
+  const spotsClass=sold?'full':low?'low':'';
+  const priceTxt =ev.price===0?'<span class="free">Gratuit</span>':`<sup>€</sup>${ev.price}`;
+  const btnClass =sold?'disabled':ev.price===0?'outline':'primary';
+  const btnTxt   =sold?'Complet':"S'inscrire →";
+  const featured =ev.featured?' featured':'';
+  const opacity  =sold?' style="opacity:.6;pointer-events:none;"':'';
+  const clickCard=sold?'':` onclick="openModal('${ev.id}')"`;
+  const clickBtn =sold?'':` onclick="event.stopPropagation();openModal('${ev.id}')"`;
+  const d        =fmtDate(ev.dateStart,ev.dateEnd);
+  const horaires =ev.timeStart&&ev.timeEnd
+    ? `<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${ev.timeStart} – ${ev.timeEnd}</div>`
+    : '';
+  return `<div class="event-card${featured}" data-type="${ev.type}${ev.price===0?' gratuit':''}"${clickCard}${opacity}>
+    <div class="card-badge-row">${typeBadge}<span class="card-spots ${spotsClass}">${spotsTxt}</span></div>
+    <div class="card-body">
+      <div class="card-title">${ev.title}</div>
+      <div class="card-subtitle">${ev.sub}</div>
+      <div class="card-meta">
+        <div class="card-meta-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${d}</div>
+        <div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>${ev.lieu}</div>
+        ${horaires}
+      </div>
+    </div>
+    <div class="card-footer">
+      <div class="card-price">${priceTxt}</div>
+      <button class="btn-inscr ${btnClass}"${clickBtn}>${btnTxt}</button>
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/jpeg" href="https://raw.githubusercontent.com/fullfightingbons/calendrier-americanfullfightingbons/main/Logo.jpg"><title>American Full Fighting Bons-en-Chablais — Inscription aux Événements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--red:#E10600;
+--red-dark:#8B0000;
+--dark:#050505;
+--dark-2:#0f0f0f;
+--dark-3:#161616;
+--white:#ffffff;
+--text:#f5f5f5;
+--muted:#9b9b9b;
+--border:#242424;
+--gold:#d4af37;
+--radius:18px;
+--radius-lg:28px;
+--font-display:'Bebas Neue',sans-serif;
+--font-body:'DM Sans',sans-serif;
+--shadow-red:0 0 30px rgba(225,6,0,.25);
+--shadow-card:0 10px 40px rgba(0,0,0,.45);
+}
+/* HEADER */
+header{background:var(--dark);color:var(--white);padding:0 2rem}
+.header-inner{max-width:900px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:36px;height:36px;background:var(--red);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:22px;height:22px;fill:white}
+.logo-name{font-family:var(--font-display);font-size:22px;letter-spacing:1px;color:white}
+.logo-season{font-size:12px;color:#888;margin-top:-2px}
+.header-badge{font-size:12px;background:#1a1a1a;border:1px solid #333;color:#aaa;padding:4px 12px;border-radius:20px}
+
+/* HERO */
+.hero{position:relative;min-height:82vh;display:flex;align-items:center;overflow:hidden;background:linear-gradient(to right, rgba(0,0,0,.92), rgba(0,0,0,.55)),url('https://images.unsplash.com/photo-1549719386-74dfcbf7dbed?q=80&w=2070&auto=format&fit=crop');background-size:cover;background-position:center;padding:4rem 2rem}
+.hero::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at center,rgba(225,6,0,.18),transparent 60%);pointer-events:none}
+.hero-inner{position:relative;z-index:1;max-width:900px;margin:0 auto;width:100%}
+.hero-top{margin-bottom:2.5rem}
+.hero-calendar{background:rgba(0,0,0,.55);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-lg);overflow:hidden}
+.hero-cal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.1)}
+.hero-cal-title{font-family:var(--font-display);font-size:16px;letter-spacing:1px;color:white}
+.hero-cal-badge{font-size:11px;font-weight:600;background:var(--red);color:white;padding:3px 10px;border-radius:20px}
+.hero-cal-table-wrap{overflow-x:auto}
+.hero-cal-table{width:100%;border-collapse:collapse;font-size:13px}
+.hero-cal-table th{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:10px 16px;text-align:left;white-space:nowrap;background:rgba(0,0,0,.2)}
+.hero-cal-table td{padding:9px 16px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.85);white-space:nowrap;vertical-align:middle}
+.hero-cal-table tr:hover td{background:rgba(255,255,255,.05)}
+.hero-cal-table .col-date{color:var(--gold);font-weight:600;font-size:12px}
+.hero-cal-table .col-event{color:white;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.hero-cal-table .col-name{color:rgba(255,255,255,.9)}
+.hero-cal-table .col-cat{font-size:11px;color:rgba(255,255,255,.5)}
+.hero-cal-table .col-status{font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;display:inline-block}
+.status-paye{background:rgba(39,174,96,.2);color:#2ecc71;border:1px solid rgba(46,204,113,.3)}
+.status-gratuit{background:rgba(52,152,219,.2);color:#74b9ff;border:1px solid rgba(52,152,219,.3)}
+.status-attente{background:rgba(243,156,18,.2);color:#f39c12;border:1px solid rgba(243,156,18,.3)}
+.hero-cal-empty{padding:2rem;text-align:center;color:rgba(255,255,255,.35);font-size:13px}
+.hero-cal-loading{padding:1.5rem;text-align:center;color:rgba(255,255,255,.35);font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
+.hero-cal-dot{width:6px;height:6px;background:var(--red);border-radius:50%;animation:cal-pulse 1.2s ease-in-out infinite}
+.hero-cal-dot:nth-child(2){animation-delay:.2s}
+.hero-cal-dot:nth-child(3){animation-delay:.4s}
+@keyframes cal-pulse{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.hero-cal-footer{padding:10px 20px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:rgba(255,255,255,.3);text-align:right}
+
+/* FILTERS */
+.filters-bar{background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.filters-inner{max-width:900px;margin:0 auto;padding:0 2rem;display:flex;align-items:center;gap:8px;height:52px;overflow-x:auto}
+.filter-btn{font-family:var(--font-body);font-size:13px;font-weight:500;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:white;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s}
+.filter-btn:hover{border-color:var(--red);color:var(--red)}
+.filter-btn.active{background:var(--red);border-color:var(--red);color:white}
+
+/* EVENTS GRID */
+.events-section{max-width:900px;margin:0 auto;padding:2.5rem 2rem}
+.section-label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:1.5rem}
+.events-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}
+.event-card{background:white;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s}
+.event-card:hover{transform:translateY(-3px);border-color:#bbb;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.event-card.featured{border-color:var(--red);border-width:2px}
+.card-badge-row{padding:14px 16px 0;display:flex;align-items:center;justify-content:space-between}
+.badge{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:20px}
+.badge-stage{background:#EBF5FB;color:#1A5276}
+.badge-compet{background:#FDEDEC;color:#922B21}
+.badge-stage-ext{background:#EAFAF1;color:#1E8449}
+.badge-grade{background:#F5EEF8;color:#6C3483}
+.badge-sold-out{background:#f5f5f5;color:#999}
+.card-spots{font-size:12px;color:var(--muted)}
+.card-spots.low{color:#E67E22;font-weight:500}
+.card-spots.full{color:#999}
+.card-body{padding:12px 16px 16px}
+.card-title{font-family:var(--font-display);font-size:22px;letter-spacing:.5px;line-height:1.1;margin-bottom:4px}
+.card-subtitle{font-size:13px;color:var(--muted);margin-bottom:14px}
+.card-meta{display:flex;flex-direction:column;gap:5px}
+.card-meta-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mid)}
+.card-meta-row svg{width:14px;height:14px;flex-shrink:0;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.card-footer{padding:12px 16px;border-top:1px solid #f2f2f2;display:flex;align-items:center;justify-content:space-between}
+.card-price{font-family:var(--font-display);font-size:26px;color:var(--dark)}
+.card-price sup{font-family:var(--font-body);font-size:13px;font-weight:500;vertical-align:super;margin-right:2px}
+.card-price .free{font-size:16px;font-weight:600;color:var(--red);font-family:var(--font-body)}
+.btn-inscr{font-family:var(--font-body);font-size:13px;font-weight:600;padding:7px 16px;border-radius:6px;border:none;cursor:pointer;transition:all .15s}
+.btn-inscr.primary{background:var(--red);color:white}
+.btn-inscr.primary:hover{background:var(--red-dark)}
+.btn-inscr.disabled{background:#eee;color:#aaa;cursor:not-allowed}
+.btn-inscr.outline{background:white;color:var(--dark);border:1px solid var(--border)}
+.btn-inscr.outline:hover{border-color:#999}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(2px)}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:var(--radius-lg);width:100%;max-width:600px;max-height:90vh;overflow-y:auto;position:relative}
+.modal-header{background:var(--dark);color:white;padding:1.5rem 2rem 1.25rem;border-radius:var(--radius-lg) var(--radius-lg) 0 0;position:sticky;top:0;z-index:10}
+.modal-close{position:absolute;top:1rem;right:1.25rem;background:none;border:none;color:#888;cursor:pointer;font-size:22px;line-height:1;padding:4px}
+.modal-close:hover{color:white}
+.modal-event-title{font-family:var(--font-display);font-size:28px;letter-spacing:1px;line-height:1.1}
+.modal-event-sub{font-size:13px;color:#999;margin-top:4px}
+.progress-bar{background:#1a1a1a;height:4px;margin-top:14px;border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--red);border-radius:2px;transition:width .3s}
+.progress-steps{display:flex;justify-content:space-between;margin-top:6px}
+.progress-step{font-size:11px;color:#555;transition:color .2s}
+.progress-step.active{color:var(--red);font-weight:500}
+.modal-body{padding:1.75rem 2rem}
+.step{display:none}
+.step.active{display:block}
+.step-title{font-size:18px;font-weight:600;margin-bottom:4px;color:var(--dark)}
+.step-desc{font-size:14px;color:var(--muted);margin-bottom:1.5rem}
+.form-group{margin-bottom:1.1rem}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:block;font-size:13px;font-weight:500;margin-bottom:5px;color:var(--mid)}
+label .req{color:var(--red)}
+input,select,textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-body);font-size:14px;color:var(--dark);background:white;transition:border-color .15s;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.08)}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+textarea{resize:vertical;min-height:80px}
+.check-group{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
+.check-group:hover{border-color:#bbb}
+.check-group input[type="checkbox"]{width:16px;height:16px;flex-shrink:0;margin-top:2px;accent-color:var(--red)}
+.check-group .check-text{font-size:13px;color:var(--mid);line-height:1.5}
+.check-group .check-text strong{color:var(--dark)}
+.summary-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem}
+.summary-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:5px 0;border-bottom:1px solid #ececec}
+.summary-row:last-child{border:none;margin-top:6px;padding-top:10px;font-weight:600;font-size:15px}
+.summary-row .label{color:var(--muted)}
+.info-alert{background:#EBF5FB;border-left:3px solid #2980B9;padding:10px 14px;border-radius:4px;font-size:13px;color:#1A5276;margin-bottom:1.25rem;line-height:1.5}
+.success-screen{text-align:center;padding:2rem 1rem}
+.success-icon{width:64px;height:64px;background:#fef2f2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem}
+.success-icon svg{width:30px;height:30px;stroke:var(--red);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.success-title{font-family:var(--font-display);font-size:32px;letter-spacing:1px;margin-bottom:8px}
+.success-sub{font-size:15px;color:var(--muted);max-width:360px;margin:0 auto 1.5rem;line-height:1.6}
+.recap-card{background:#f9f9f9;border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;text-align:left;margin-bottom:1.5rem;font-size:13px}
+.recap-card .recap-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #ececec}
+.recap-card .recap-row:last-child{border:none}
+.recap-card .recap-label{color:var(--muted)}
+.modal-footer{padding:1rem 2rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #f0f0f0}
+.btn-nav{font-family:var(--font-body);font-size:14px;font-weight:500;padding:10px 20px;border-radius:7px;cursor:pointer;transition:all .15s;border:none}
+.btn-back{background:white;color:var(--mid);border:1px solid var(--border)}
+.btn-back:hover{background:#f5f5f5}
+.btn-next{background:var(--red);color:white}
+.btn-next:hover{background:var(--red-dark)}
+.btn-next:disabled{background:#ccc;cursor:not-allowed}
+
+/* FOOTER */
+footer{margin-top:4rem;background:var(--dark);color:#666;text-align:center;padding:1.5rem;font-size:12px}
+footer span{color:#888}
+
+/* ADMIN PANEL */
+.admin-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)}
+.admin-overlay.open{display:flex}
+.admin-login-box{background:white;border-radius:var(--radius-lg);width:100%;max-width:380px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.admin-login-header{background:var(--dark);padding:1.5rem 2rem;text-align:center}
+.admin-login-header .shield{width:44px;height:44px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.admin-login-header .shield svg{width:24px;height:24px;fill:white}
+.admin-login-title{font-family:var(--font-display);font-size:22px;color:white;letter-spacing:1px}
+.admin-login-sub{font-size:13px;color:#777;margin-top:4px}
+.admin-login-body{padding:1.75rem 2rem}
+.admin-login-error{background:#FDEDEC;border:1px solid #f5c6c6;border-radius:6px;padding:10px 14px;font-size:13px;color:#8B0000;margin-bottom:1rem;display:none}
+.admin-panel{background:#f4f4f4;min-height:100vh;position:fixed;inset:0;z-index:2000;display:none;flex-direction:column;overflow:hidden}
+.admin-panel.open{display:flex}
+.admin-topbar{background:var(--dark);color:white;padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px;flex-shrink:0}
+.admin-topbar-left{display:flex;align-items:center;gap:12px}
+.admin-topbar-logo{font-family:var(--font-display);font-size:18px;letter-spacing:1px}
+.admin-topbar-badge{font-size:11px;background:var(--red);color:white;padding:3px 10px;border-radius:20px;font-weight:600}
+.admin-topbar-right{display:flex;align-items:center;gap:10px}
+.admin-btn-quit{font-family:var(--font-body);font-size:13px;padding:6px 14px;border-radius:6px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;transition:all .15s}
+.admin-btn-quit:hover{background:#C0392B;border-color:#C0392B;color:white}
+.admin-content{flex:1;overflow-y:auto;padding:2rem}
+.admin-inner{max-width:960px;margin:0 auto}
+.admin-section-title{font-family:var(--font-display);font-size:28px;letter-spacing:1px;margin-bottom:6px}
+.admin-section-sub{font-size:14px;color:var(--muted);margin-bottom:2rem}
+.admin-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px}
+.btn-add-event{font-family:var(--font-body);font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;border:none;background:var(--red);color:white;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .15s}
+.btn-add-event:hover{background:var(--red-dark)}
+.admin-events-list{display:flex;flex-direction:column;gap:12px}
+.admin-event-row{background:white;border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;display:flex;align-items:center;gap:16px;transition:box-shadow .15s}
+.admin-event-row:hover{box-shadow:0 4px 16px rgba(0,0,0,.07)}
+.admin-event-row.sold-out{opacity:.6}
+.admin-event-color{width:4px;height:52px;border-radius:4px;flex-shrink:0}
+.admin-event-info{flex:1;min-width:0}
+.admin-event-name{font-family:var(--font-display);font-size:18px;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-event-meta{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-event-badges{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.admin-price-tag{font-family:var(--font-display);font-size:20px;color:var(--dark);flex-shrink:0;min-width:60px;text-align:right}
+.admin-actions{display:flex;gap:8px;flex-shrink:0}
+.admin-btn-edit,.admin-btn-del{font-family:var(--font-body);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s;border:none}
+.admin-btn-edit{background:#EBF5FB;color:#1A5276;border:1px solid #AED6F1}
+.admin-btn-edit:hover{background:#2980B9;color:white;border-color:#2980B9}
+.admin-btn-del{background:#FDEDEC;color:#8B0000;border:1px solid #f5c6c6}
+.admin-btn-del:hover{background:var(--red);color:white;border-color:var(--red)}
+.admin-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(3px)}
+.admin-modal-overlay.open{display:flex}
+.admin-modal{background:white;border-radius:var(--radius-lg);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.admin-modal-header{background:var(--dark);color:white;padding:1.25rem 1.75rem;display:flex;align-items:center;justify-content:space-between;border-radius:var(--radius-lg) var(--radius-lg) 0 0;position:sticky;top:0;z-index:10}
+.admin-modal-title{font-family:var(--font-display);font-size:22px;letter-spacing:1px}
+.admin-modal-close{background:none;border:none;color:#777;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1}
+.admin-modal-close:hover{color:white}
+.admin-modal-body{padding:1.75rem}
+.admin-form-section{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:1.5rem 0 .75rem;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.admin-form-section:first-child{margin-top:0}
+.admin-toggle-group{display:flex;gap:8px;flex-wrap:wrap}
+.admin-toggle-btn{font-family:var(--font-body);font-size:13px;font-weight:500;padding:7px 16px;border-radius:20px;border:2px solid var(--border);background:white;color:var(--muted);cursor:pointer;transition:all .15s}
+.admin-toggle-btn.active{border-color:var(--red);background:#fef2f2;color:#8B0000;font-weight:600}
+.admin-modal-footer{padding:1.25rem 1.75rem;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:10px}
+.btn-save{font-family:var(--font-body);font-size:14px;font-weight:600;padding:10px 24px;border-radius:7px;border:none;background:var(--red);color:white;cursor:pointer;transition:background .15s}
+.btn-save:hover{background:var(--red-dark)}
+.btn-cancel{font-family:var(--font-body);font-size:14px;font-weight:500;padding:10px 20px;border-radius:7px;border:1px solid var(--border);background:white;color:#555;cursor:pointer;transition:background .15s}
+.btn-cancel:hover{background:#f5f5f5}
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:4000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(3px)}
+.confirm-overlay.open{display:flex}
+.confirm-box{background:white;border-radius:var(--radius-lg);max-width:400px;width:100%;padding:2rem;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.2)}
+.confirm-icon{font-size:40px;margin-bottom:1rem}
+.confirm-title{font-family:var(--font-display);font-size:22px;letter-spacing:.5px;margin-bottom:8px}
+.confirm-msg{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:1.5rem}
+.confirm-btns{display:flex;gap:10px;justify-content:center}
+.admin-empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.admin-empty-icon{font-size:48px;margin-bottom:1rem;opacity:.5}
+.admin-spots-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px}
+.spots-ok{background:#EAFAF1;color:#1E8449}
+.spots-low{background:#FEF9E7;color:#B7770D}
+.spots-full{background:#f5f5f5;color:#999}
+
+/* ADMIN — ONGLETS */
+.admin-tabs{display:flex;gap:4px;background:#e8e8e8;border-radius:10px;padding:4px;margin-bottom:2rem}
+.admin-tab{flex:1;font-family:var(--font-body);font-size:13px;font-weight:600;padding:9px 16px;border-radius:8px;border:none;background:transparent;color:#888;cursor:pointer;transition:all .15s;text-align:center}
+.admin-tab.active{background:white;color:var(--dark);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.admin-tab-content{display:none}
+.admin-tab-content.active{display:block}
+
+/* ADMIN — INSCRIPTIONS */
+.regs-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap}
+.regs-select{font-family:var(--font-body);font-size:13px;padding:8px 32px 8px 12px;border:1px solid #ccc;border-radius:8px;background:white;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;outline:none}
+.regs-select:focus{border-color:var(--red)}
+.btn-export{font-family:var(--font-body);font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;border:1px solid #AED6F1;background:#EBF5FB;color:#1A5276;cursor:pointer;transition:all .15s}
+.btn-export:hover{background:#2980B9;color:white;border-color:#2980B9}
+.regs-stats{display:flex;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap}
+.regs-stat{background:white;border:1px solid #e0e0e0;border-radius:12px;padding:14px 18px;flex:1;min-width:110px;text-align:center}
+.regs-stat-num{font-family:var(--font-display);font-size:30px;line-height:1;color:var(--dark)}
+.regs-stat-lbl{font-size:11px;color:var(--muted);margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.regs-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #e0e0e0;background:white}
+.regs-table{width:100%;border-collapse:collapse;font-size:13px}
+.regs-table th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:11px 14px;text-align:left;background:#f8f8f8;border-bottom:1px solid #ebebeb;white-space:nowrap}
+.regs-table td{padding:11px 14px;border-bottom:1px solid #f2f2f2;vertical-align:middle}
+.regs-table tr:last-child td{border-bottom:none}
+.regs-table tr:hover td{background:#fafafa}
+.reg-name{font-weight:600;color:var(--dark)}
+.reg-email{font-size:12px;color:var(--muted);margin-top:2px}
+.reg-pay{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;display:inline-block}
+.pay-paye{background:#EAFAF1;color:#1E8449}
+.pay-gratuit{background:#EBF5FB;color:#1A5276}
+.pay-attente{background:#FEF9E7;color:#B7770D}
+.pay-annule{background:#f5f5f5;color:#999}
+.btn-del-reg{font-family:var(--font-body);font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;border:none;background:#FDEDEC;color:#922B21;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-del-reg:hover{background:var(--red);color:white}
+.regs-empty{text-align:center;padding:3rem;color:var(--muted);font-size:14px}
+.regs-loading{text-align:center;padding:2rem;color:var(--muted);font-size:13px}
+
+/* RESPONSIVE */
+@media(max-width:580px){
+  .form-row{grid-template-columns:1fr}
+  .events-grid{grid-template-columns:1fr}
+  .modal{max-height:100vh;border-radius:0;height:100vh}
+  .modal-header{border-radius:0}
+  .modal-event-title{font-size:22px}
+  .hero{padding:2.5rem 1rem}
+  .regs-stats{flex-direction:column}
+  .admin-tabs{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon" style="background:none;padding:0;overflow:hidden">
+        <img src="https://raw.githubusercontent.com/fullfightingbons/calendrier-americanfullfightingbons/main/Logo.jpg" 
+             alt="Logo Full Fighting Bons-en-Chablais" 
+             style="width:36px;height:36px;object-fit:contain;border-radius:4px;display:block">
+      </div>
+      <div>
+        <div class="logo-name">American Full Fighting</div>
+        <div class="logo-season">Bons-en-Chablais · FFK</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="header-badge">Saison 2025–2026</div>
+      <button onclick="openAdminLogin()" style="font-family:var(--font-body);font-size:12px;padding:4px 12px;border-radius:20px;border:1px solid #444;background:transparent;color:#888;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='#C0392B';this.style.color='#C0392B'" onmouseout="this.style.borderColor='#444';this.style.color='#888'">⚙ Admin</button>
+    </div>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <h1 style="font-family:var(--font-display);font-size:clamp(48px,8vw,90px);color:white;line-height:.95;letter-spacing:2px;margin-bottom:1rem">ÉVÉNEMENTS<br><span style="color:var(--red)">& STAGES</span></h1>
+      <p style="font-size:16px;color:rgba(255,255,255,.7);max-width:440px;line-height:1.6;margin-bottom:1.5rem">Inscrivez-vous aux événements du club — stages, compétitions et séminaires.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7)">✓ Inscription 100% en ligne</div>
+        <div style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7)">✓ Paiement sécurisé</div>
+        <div style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7)">✓ Confirmation instantanée</div>
+      </div>
+    </div>
+
+    <div class="hero-calendar">
+      <div class="hero-cal-header">
+        <div class="hero-cal-title">📋 INSCRITS — PROCHAINS ÉVÉNEMENTS</div>
+        <div class="hero-cal-badge" id="hero-cal-count">…</div>
+      </div>
+      <div class="hero-cal-table-wrap">
+        <table class="hero-cal-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Événement</th>
+              <th>Nom &amp; Prénom</th>
+              <th>Catégorie</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody id="hero-cal-body">
+            <tr><td colspan="5">
+              <div class="hero-cal-loading">
+                <div class="hero-cal-dot"></div>
+                <div class="hero-cal-dot"></div>
+                <div class="hero-cal-dot"></div>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hero-cal-footer" id="hero-cal-updated"></div>
+    </div>
+  </div>
+</div>
+
+<div class="filters-bar">
+  <div class="filters-inner">
+    <button class="filter-btn active" onclick="filterCards('tous',this)">Tous</button>
+    <button class="filter-btn" onclick="filterCards('stage',this)">Stages</button>
+    <button class="filter-btn" onclick="filterCards('competition',this)">Compétitions</button>
+    <button class="filter-btn" onclick="filterCards('seminaire',this)">Séminaires</button>
+    <button class="filter-btn" onclick="filterCards('grade',this)">Passages de grade</button>
+    <button class="filter-btn" onclick="filterCards('gratuit',this)">Gratuit</button>
+  </div>
+</div>
+
+<div class="events-section">
+  <div class="section-label">Prochains événements</div>
+  <div class="events-grid" id="events-grid">
+    <div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">📅</div>
+      Chargement des événements…
+    </div>
+  </div>
+</div>
+
+<!-- MODAL INSCRIPTION -->
+<div class="modal-overlay" id="modal-overlay" onclick="maybeClose(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">✕</button>
+      <div class="modal-event-title" id="modal-title">Titre de l'événement</div>
+      <div class="modal-event-sub" id="modal-sub">Sous-titre</div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:25%"></div></div>
+      <div class="progress-steps">
+        <span class="progress-step active" id="ps1">01 · Identité</span>
+        <span class="progress-step" id="ps2">02 · Détails</span>
+        <span class="progress-step" id="ps3">03 · Récapitulatif</span>
+        <span class="progress-step" id="ps4">04 · Paiement</span>
+      </div>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- STEP 1 -->
+      <div class="step active" id="step-1">
+        <div class="step-title">Informations personnelles</div>
+        <div class="step-desc">Renseignez les coordonnées du participant à l'événement.</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nom <span class="req">*</span></label>
+            <input type="text" id="f-nom" placeholder="DUPONT">
+          </div>
+          <div class="form-group">
+            <label>Prénom <span class="req">*</span></label>
+            <input type="text" id="f-prenom" placeholder="Léa">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Date de naissance <span class="req">*</span></label>
+            <input type="date" id="f-dob">
+          </div>
+          <div class="form-group">
+            <label>Téléphone <span class="req">*</span></label>
+            <input type="tel" id="f-tel" placeholder="06 00 00 00 00">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email <span class="req">*</span></label>
+          <input type="email" id="f-email" placeholder="lea.dupont@example.fr">
+        </div>
+        <div class="form-group">
+          <label>Numéro de licence fédérale</label>
+          <input type="text" id="f-licence" placeholder="FFK-XXXXXXXX (si applicable)">
+        </div>
+        <div class="check-group" style="margin-top:.5rem">
+          <input type="checkbox" id="f-mineur">
+          <div class="check-text"><strong>Participant mineur</strong> — une autorisation parentale sera requise à l'étape suivante.</div>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="step" id="step-2">
+        <div class="step-title">Détails & informations complémentaires</div>
+        <div class="step-desc">Précisez les informations nécessaires à l'organisation.</div>
+        <div class="form-group">
+          <label>Catégorie de poids / Catégorie d'âge</label>
+          <select id="f-categorie">
+            <option value="">— Sélectionner —</option>
+            <option>Benjamin (-12 ans)</option>
+            <option>Minime (12–13 ans)</option>
+            <option>Cadet (14–15 ans)</option>
+            <option>Junior (16–17 ans)</option>
+            <option>Senior (18–39 ans)</option>
+            <option>Vétéran (40 ans et +)</option>
+          </select>
+        </div>
+        <div id="grade-section" style="display:none">
+          <div class="info-alert">Passage de grade — précisez votre ceinture actuelle et la ceinture visée.</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Ceinture actuelle <span class="req">*</span></label>
+              <select id="f-ceinture-actuelle">
+                <option value="">— Sélectionner —</option>
+                <option>Blanche</option><option>Blanche–Jaune</option><option>Jaune</option>
+                <option>Jaune–Orange</option><option>Orange</option><option>Orange–Verte</option>
+                <option>Verte</option><option>Bleue</option><option>Marron</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Ceinture visée <span class="req">*</span></label>
+              <select id="f-ceinture-visee">
+                <option value="">— Sélectionner —</option>
+                <option>Blanche–Jaune</option><option>Jaune</option>
+                <option>Jaune–Orange</option><option>Orange</option><option>Orange–Verte</option>
+                <option>Verte</option><option>Bleue</option><option>Marron</option><option>Noire</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Niveau pratique</label>
+          <select id="f-niveau">
+            <option value="">— Sélectionner —</option>
+            <option>Débutant (moins d'1 an)</option>
+            <option>Intermédiaire (1–3 ans)</option>
+            <option>Confirmé (3–5 ans)</option>
+            <option>Expert (5 ans et +)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Régime alimentaire / Allergie (optionnel)</label>
+          <input type="text" id="f-regime" placeholder="Ex : végétarien, allergie aux arachides…">
+        </div>
+        <div id="mineur-section" style="display:none">
+          <div class="info-alert">Ce participant est mineur — le représentant légal doit valider l'inscription.</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nom du représentant légal <span class="req">*</span></label>
+              <input type="text" id="f-parent-nom" placeholder="DUPONT">
+            </div>
+            <div class="form-group">
+              <label>Prénom <span class="req">*</span></label>
+              <input type="text" id="f-parent-prenom" placeholder="Marie">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Téléphone représentant légal <span class="req">*</span></label>
+            <input type="tel" id="f-parent-tel" placeholder="06 00 00 00 00">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:.5rem">
+          <label>Message / remarque (optionnel)</label>
+          <textarea id="f-message" placeholder="Informations utiles pour l'organisation…"></textarea>
+        </div>
+        <div class="check-group">
+          <input type="checkbox" id="f-certif">
+          <div class="check-text"><strong>Je certifie</strong> être titulaire d'un certificat médical de non contre-indication à la pratique du sport de combat, ou m'engage à en fournir un avant l'événement si requis.</div>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="step" id="step-3">
+        <div class="step-title">Récapitulatif de l'inscription</div>
+        <div class="step-desc">Vérifiez les informations avant de procéder au paiement.</div>
+        <div class="summary-box" id="summary-content"></div>
+        <div class="check-group" style="margin-top:1rem">
+          <input type="checkbox" id="f-reglement">
+          <div class="check-text"><strong>J'accepte le règlement intérieur</strong> du club et reconnais avoir pris connaissance des conditions de participation à cet événement.</div>
+        </div>
+        <div class="check-group" style="margin-top:8px">
+          <input type="checkbox" id="f-image">
+          <div class="check-text"><strong>J'autorise</strong> le club à diffuser des photos et vidéos prises lors de l'événement sur ses supports de communication.</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           STEP 4 — PAIEMENT (modifié)
+           • Événement gratuit  → bouton "Valider" direct
+           • Événement payant   → appel /api/checkout
+                                  → redirection HelloAsso
+                                  → retour ?checkout=success
+                                  → confirmation automatique
+           ═══════════════════════════════════════════════════ -->
+      <div class="step" id="step-4">
+        <div class="step-title">Paiement</div>
+        <div class="step-desc">Finalisez votre inscription en procédant au paiement sécurisé.</div>
+
+        <!-- Événement GRATUIT -->
+        <div id="paiement-free-msg" style="display:none">
+          <div class="info-alert">
+            Cet événement est <strong>gratuit</strong>. Aucun paiement requis — validez simplement votre inscription ci-dessous.
+          </div>
+        </div>
+
+        <!-- Événement PAYANT -->
+        <div id="paiement-options" style="display:none">
+
+          <!-- Bandeau montant -->
+          <div style="background:#fef2f2;border:2px solid #f5c6c6;border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#8B0000;margin-bottom:2px">Montant à régler</div>
+              <div style="font-family:var(--font-display);font-size:32px;color:var(--dark)" id="ha-montant-label">—</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Paiement sécurisé via</div>
+              <div style="background:#FF5F00;color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">HelloAsso</div>
+            </div>
+          </div>
+
+          <!-- Bouton payer -->
+          <div style="text-align:center;padding:8px 0 16px">
+            <button id="btn-open-helloasso" onclick="openHelloAsso()"
+              style="font-family:var(--font-body);font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;border:none;cursor:pointer;background:#FF5F00;color:white;width:100%;max-width:360px;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background .15s;box-shadow:0 4px 14px rgba(255,95,0,.3)"
+              onmouseover="this.style.background='#e65500'" onmouseout="this.style.background='#FF5F00'">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              Payer sur HelloAsso
+            </button>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6">
+              Vous allez être redirigé vers HelloAsso.<br>
+              <strong>La confirmation est automatique</strong> après paiement validé.
+            </p>
+          </div>
+
+          <!-- Spinner affiché pendant l'appel /api/checkout -->
+          <div id="ha-loading" style="display:none;text-align:center;padding:1rem;color:var(--muted);font-size:13px">
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+              <div class="hero-cal-dot"></div>
+              <div class="hero-cal-dot"></div>
+              <div class="hero-cal-dot"></div>
+              <span>Redirection vers HelloAsso en cours…</span>
+            </div>
+          </div>
+
+          <!-- Message d'erreur checkout -->
+          <div id="ha-error" style="display:none;background:#FDEDEC;border-left:3px solid var(--red);padding:12px 16px;border-radius:6px;font-size:13px;color:#8B0000;margin-top:8px"></div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-nav btn-back" id="btn-back" onclick="prevStep()" style="visibility:hidden">← Retour</button>
+      <button class="btn-nav btn-next" id="btn-next" onclick="nextStep()">Continuer →</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>American Full Fighting Bons-en-Chablais · FFK · Saison 2025–2026</span><br>
+  Tous les paiements sont sécurisés via HelloAsso · Données traitées conformément au RGPD
+</footer>
+
+<!-- ADMIN LOGIN -->
+<div class="admin-overlay" id="admin-login-overlay">
+  <div class="admin-login-box">
+    <div class="admin-login-header">
+      <div class="shield">
+        <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1zm0 4.5l5 2.72V11c0 3.18-2.19 6.15-5 7.18-2.81-1.03-5-4-5-7.18V8.22L12 5.5z"/></svg>
+      </div>
+      <div class="admin-login-title">ESPACE ADMIN</div>
+      <div class="admin-login-sub">American Full Fighting · Bons-en-Chablais</div>
+    </div>
+    <div class="admin-login-body">
+      <div class="admin-login-error" id="login-error">Mot de passe incorrect. Réessayez.</div>
+      <div class="form-group">
+        <label>Mot de passe administrateur <span class="req">*</span></label>
+        <input type="password" id="admin-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdminLogin()">
+      </div>
+      <button class="btn-save" style="width:100%;margin-top:.5rem" onclick="checkAdminLogin()">Accéder au panneau →</button>
+      <button class="btn-cancel" style="width:100%;margin-top:8px" onclick="closeAdminLogin()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div class="admin-panel" id="admin-panel">
+  <div class="admin-topbar">
+    <div class="admin-topbar-left">
+      <div class="admin-topbar-logo">PANNEAU ADMIN</div>
+      <div class="admin-topbar-badge">⚙ Mode administrateur</div>
+    </div>
+    <div class="admin-topbar-right">
+      <span style="font-size:12px;color:#666">Connecté en tant qu'admin</span>
+      <button class="admin-btn-quit" onclick="quitAdmin()">Quitter ✕</button>
+    </div>
+  </div>
+
+  <div class="admin-content">
+    <div class="admin-inner">
+      <div id="admin-config-status" style="margin-bottom:1.5rem"></div>
+      <div class="admin-tabs">
+        <button class="admin-tab active" onclick="switchAdminTab('events',this)">📅 Événements</button>
+        <button class="admin-tab" onclick="switchAdminTab('registrations',this)">👥 Inscriptions</button>
+      </div>
+
+      <!-- ── Onglet Événements ── -->
+      <div class="admin-tab-content active" id="tab-events">
+        <div class="admin-section-title">GESTION DES ÉVÉNEMENTS</div>
+        <div class="admin-section-sub">Créez, modifiez ou supprimez les événements affichés sur la page d'inscription.</div>
+        <div class="admin-toolbar">
+          <div style="font-size:13px;color:var(--muted)"><span id="admin-event-count">0</span> événement(s) au total</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onclick="resetAdminEvents()" style="font-family:var(--font-body);font-size:12px;padding:7px 14px;border-radius:7px;border:1px solid #ddd;background:white;color:#999;cursor:pointer">↺ Réinitialiser</button>
+            <button class="btn-add-event" onclick="openEventForm(null)">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nouvel événement
+            </button>
+          </div>
+        </div>
+        <div class="admin-events-list" id="admin-events-list"></div>
+      </div>
+
+      <!-- ── Onglet Inscriptions ── -->
+      <div class="admin-tab-content" id="tab-registrations">
+        <div class="admin-section-title">GESTION DES INSCRIPTIONS</div>
+        <div class="admin-section-sub">Consultez, filtrez et supprimez les inscriptions. La suppression restitue automatiquement la place sur l'événement.</div>
+        <div class="regs-toolbar">
+          <select class="regs-select" id="regs-filter-event" onchange="loadRegistrations()">
+            <option value="">Tous les événements</option>
+          </select>
+          <select class="regs-select" id="regs-filter-status" onchange="loadRegistrations()">
+            <option value="">Tous les statuts</option>
+            <option value="paye">Payé</option>
+            <option value="gratuit">Gratuit</option>
+            <option value="en_attente">En attente</option>
+            <option value="annule">Annulé</option>
+          </select>
+          <button class="btn-ex<button class="btn-export" onclick="exportCSV()">📅 Exporter Calendrier PDF</button>port" onclick="exportCSV()">⬇ Exporter CSV</button>
+        </div>
+        <div class="regs-stats" id="regs-stats"></div>
+        <div class="regs-table-wrap">
+          <table class="regs-table">
+            <thead>
+              <tr>
+                <th>Participant</th>
+                <th>Événement</th>
+                <th>Date naiss.</th>
+                <th>Téléphone</th>
+                <th>Catégorie</th>
+                <th>Paiement</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="regs-tbody">
+              <tr><td colspan="7" class="regs-loading">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN EVENT FORM MODAL -->
+<div class="admin-modal-overlay" id="admin-event-modal">
+  <div class="admin-modal">
+    <div class="admin-modal-header">
+      <div class="admin-modal-title" id="admin-modal-title">NOUVEL ÉVÉNEMENT</div>
+      <button class="admin-modal-close" onclick="closeEventForm()">✕</button>
+    </div>
+    <div class="admin-modal-body">
+      <input type="hidden" id="ae-id">
+      <div class="admin-form-section">Informations générales</div>
+      <div class="form-group">
+        <label>Titre de l'événement <span class="req">*</span></label>
+        <input type="text" id="ae-title" placeholder="Ex : Stage Été — Frappe & Déplacement">
+      </div>
+      <div class="form-group">
+        <label>Sous-titre / description courte <span class="req">*</span></label>
+        <input type="text" id="ae-sub" placeholder="Ex : Tous niveaux · 2 jours intensifs">
+      </div>
+      <div class="form-group">
+        <label>Type d'événement <span class="req">*</span></label>
+        <div class="admin-toggle-group" id="ae-type-group">
+          <button class="admin-toggle-btn" data-val="stage" onclick="selectToggle('ae-type-group',this)">Stage</button>
+          <button class="admin-toggle-btn" data-val="competition" onclick="selectToggle('ae-type-group',this)">Compétition</button>
+          <button class="admin-toggle-btn" data-val="seminaire" onclick="selectToggle('ae-type-group',this)">Séminaire</button>
+          <button class="admin-toggle-btn" data-val="grade" onclick="selectToggle('ae-type-group',this)">Passage de grade</button>
+        </div>
+      </div>
+      <div class="admin-form-section">Date, lieu & horaires</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date de début <span class="req">*</span></label>
+          <input type="date" id="ae-date-start">
+        </div>
+        <div class="form-group">
+          <label>Date de fin (si plusieurs jours)</label>
+          <input type="date" id="ae-date-end">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Heure de début</label>
+          <input type="time" id="ae-time-start">
+        </div>
+        <div class="form-group">
+          <label>Heure de fin</label>
+          <input type="time" id="ae-time-end">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Lieu <span class="req">*</span></label>
+        <input type="text" id="ae-lieu" placeholder="Ex : Dojo du club, Bons-en-Chablais">
+      </div>
+      <div class="admin-form-section">Tarif & places</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Prix (€) — 0 = gratuit <span class="req">*</span></label>
+          <input type="number" id="ae-price" min="0" step="1" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Nombre de places <span class="req">*</span></label>
+          <input type="number" id="ae-spots" min="0" step="1" placeholder="20">
+        </div>
+      </div>
+      <div class="admin-form-section">Statut & options</div>
+      <div class="form-group">
+        <label>Statut</label>
+        <div class="admin-toggle-group" id="ae-status-group">
+          <button class="admin-toggle-btn active" data-val="disponible" onclick="selectToggle('ae-status-group',this)">Disponible</button>
+          <button class="admin-toggle-btn" data-val="complet" onclick="selectToggle('ae-status-group',this)">Complet</button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:.75rem">
+        <div class="check-group">
+          <input type="checkbox" id="ae-featured">
+          <div class="check-text"><strong>Événement mis en avant</strong> — affichera une bordure rouge sur la carte.</div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:.75rem">
+        <div class="check-group">
+          <input type="checkbox" id="ae-isGrade">
+          <div class="check-text"><strong>Passage de grade</strong> — affiche les champs ceinture dans le formulaire d'inscription.</div>
+        </div>
+      </div>
+      <!-- Note : le champ HelloAsso URL statique est retiré.
+           Le checkout est maintenant géré dynamiquement via /api/checkout.
+           Il suffit que l'événement soit payant (price > 0). -->
+    </div>
+    <div class="admin-modal-footer">
+      <button class="btn-cancel" onclick="closeEventForm()">Annuler</button>
+      <button class="btn-save" onclick="saveEvent()">Enregistrer l'événement ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-icon">🗑️</div>
+    <div class="confirm-title" id="confirm-title">CONFIRMER LA SUPPRESSION</div>
+    <div class="confirm-msg" id="confirm-msg">Cette action est irréversible.</div>
+    <div class="confirm-btns">
+      <button class="btn-cancel" onclick="closeConfirm()">Annuler</button>
+      <button class="btn-save" style="background:#C0392B" id="confirm-yes-btn">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════
+   CONFIGURATION
+   ════════════════════════════════════════════════════ */
+const CONFIG = {
+  CLUB_EMAIL: 'contact@americanfullfightingbons.fr',
+  CLUB_NAME:  'American Full Fighting Bons-en-Chablais',
+  API_URL:    'https://calendrier.americanfullfightingbons.fr'
+};
+
+/* ── Client API Worker ─────────────────────────────── */
+const API = {
+  _token: null,
+
+  async get(path) {
+    const r = await fetch(CONFIG.API_URL + path);
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async post(path, body) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async adminPost(path, body) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API._token },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async adminPut(path, body) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API._token },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  async adminDelete(path) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + API._token }
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  // Mise à jour statut inscription (public — seul 'paye' est autorisé sans token)
+  async setRegStatus(regId, status, helloassoRef) {
+    const r = await fetch(CONFIG.API_URL + '/api/registrations/' + regId + '/status', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paiement_status: status, helloasso_ref: helloassoRef ?? null })
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  }
+};
+
+/* ── Données & état ─────────────────────────────────── */
+let events      = {};
+let adminEvents = [];
+let pendingDeleteId = null;
+
 // Empêche les doubles inscriptions gratuites
 let freeRegistrationSubmitting = false;
 
