@@ -1537,7 +1537,7 @@ function exportCSV() {
     const key = r.event_title || 'Événement inconnu';
     if (!grouped[key]) {
       const ev = adminEvents.find(e => e.title === key);
-      grouped[key] = { date: ev ? ev.dateStart : null, lieu: ev ? ev.lieu : '', regs: [] };
+grouped[key] = { date: ev ? (ev.dateStart || ev.date_start) : null, lieu: ev ? ev.lieu : '', regs: [] };
     }
     grouped[key].regs.push(r);
   });
