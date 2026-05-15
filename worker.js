@@ -123,7 +123,7 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
 }
 
 async function sendConfirmationEmails(env, { reg, ev }) {
-  const CLUB_EMAIL = 'contact@americanfullfightingbons.fr';
+  const CLUB_EMAIL = 'fullfightingbons@gmail.com';
   const CLUB_NAME  = 'American Full Fighting Bons-en-Chablais';
   const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
   const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -527,4 +527,41 @@ export default {
       return err('Erreur serveur interne', 500);
     }
   },
+
+  // ── Tâche planifiée : suppression des événements passés (> 7 jours) ──────
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(cleanupOldEvents(env));
+  },
 };
+
+/**
+ * Supprime les événements dont la date de fin (ou de début si date_end absente)
+ * est antérieure à aujourd'hui moins 7 jours.
+ * Les inscriptions liées sont supprimées en cascade (voir schéma SQL).
+ */
+async function cleanupOldEvents(env) {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffIso = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // On supprime d'abord les inscriptions orphelines pour les événements concernés
+    await env.DB.prepare(
+      `DELETE FROM registrations
+       WHERE event_id IN (
+         SELECT id FROM events
+         WHERE COALESCE(date_end, date_start) < ?
+       )`
+    ).bind(cutoffIso).run();
+
+    // Puis les événements eux-mêmes
+    const result = await env.DB.prepare(
+      `DELETE FROM events
+       WHERE COALESCE(date_end, date_start) < ?`
+    ).bind(cutoffIso).run();
+
+    console.log(`[cleanup] ${result.meta?.changes ?? 0} événement(s) supprimé(s) (cutoff: ${cutoffIso})`);
+  } catch (e) {
+    console.error('[cleanup] Erreur lors de la suppression automatique:', e.message);
+  }
+}

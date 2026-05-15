@@ -15,3 +15,8 @@ ENVIRONMENT = "production"
 
 # ── Secrets (définis via GitHub Secrets, jamais ici) ────────────────────────────────
 # ADMIN_TOKEN  → wrangler secret put ADMIN_TOKEN  (ou GitHub Secret CF_ADMIN_TOKEN)
+
+# ── Tâche planifiée : suppression automatique des événements passés (> 7 jours) ──────
+# Exécutée chaque nuit à 02h00 UTC
+[triggers]
+crons = ["0 2 * * *"]
