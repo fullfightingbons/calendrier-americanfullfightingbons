@@ -23,6 +23,10 @@ function validateEvent(body) {
   if (!validTypes.includes(body.type)) {
     throw new ApiError(`Type invalide. Valeurs : ${validTypes.join(', ')}`);
   }
+  const validStatuses = ['disponible', 'complet', 'ferme'];
+  if (body.status && !validStatuses.includes(body.status)) {
+    throw new ApiError(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
+  }
 }
 
 // ── Validation inscription ─────────────────────────────────────
@@ -123,7 +127,7 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
 }
 
 async function sendConfirmationEmails(env, { reg, ev }) {
-  const CLUB_EMAIL = 'fullfightingbons@gmail.com';
+  const CLUB_EMAIL = 'contact@americanfullfightingbons.fr';
   const CLUB_NAME  = 'American Full Fighting Bons-en-Chablais';
   const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
   const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -389,6 +393,7 @@ export default {
           const ev = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
           if (!ev)                     return err('Événement introuvable', 404);
           if (ev.status === 'complet') return err('Événement complet', 409);
+          if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
           if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
 
           const paiementStatus = ev.price === 0
@@ -505,6 +510,7 @@ export default {
         if (!ev)                     return err('Evenement introuvable', 404);
         if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
         if (ev.status === 'complet') return err('Evenement complet', 409);
+        if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
 
         const origin    = url.origin;
         const returnUrl = `${origin}/?checkout=success&event_id=${event_id}`;
@@ -527,41 +533,4 @@ export default {
       return err('Erreur serveur interne', 500);
     }
   },
-
-  // ── Tâche planifiée : suppression des événements passés (> 7 jours) ──────
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(cleanupOldEvents(env));
-  },
 };
-
-/**
- * Supprime les événements dont la date de fin (ou de début si date_end absente)
- * est antérieure à aujourd'hui moins 7 jours.
- * Les inscriptions liées sont supprimées en cascade (voir schéma SQL).
- */
-async function cleanupOldEvents(env) {
-  try {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 7);
-    const cutoffIso = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
-
-    // On supprime d'abord les inscriptions orphelines pour les événements concernés
-    await env.DB.prepare(
-      `DELETE FROM registrations
-       WHERE event_id IN (
-         SELECT id FROM events
-         WHERE COALESCE(date_end, date_start) < ?
-       )`
-    ).bind(cutoffIso).run();
-
-    // Puis les événements eux-mêmes
-    const result = await env.DB.prepare(
-      `DELETE FROM events
-       WHERE COALESCE(date_end, date_start) < ?`
-    ).bind(cutoffIso).run();
-
-    console.log(`[cleanup] ${result.meta?.changes ?? 0} événement(s) supprimé(s) (cutoff: ${cutoffIso})`);
-  } catch (e) {
-    console.error('[cleanup] Erreur lors de la suppression automatique:', e.message);
-  }
-}

@@ -208,7 +208,9 @@ footer span{color:#888}
 .admin-event-badges{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .admin-price-tag{font-family:var(--font-display);font-size:20px;color:var(--dark);flex-shrink:0;min-width:60px;text-align:right}
 .admin-actions{display:flex;gap:8px;flex-shrink:0}
-.admin-btn-edit,.admin-btn-del{font-family:var(--font-body);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s;border:none}
+.admin-btn-edit,.admin-btn-del,.admin-btn-toggle{font-family:var(--font-body);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s;border:none}
+.admin-btn-toggle{background:#FEF3C7;color:#92400E;border:1px solid #FCD34D}
+.admin-btn-toggle:hover{background:#F59E0B;color:white;border-color:#F59E0B}
 .admin-btn-edit{background:#EBF5FB;color:#1A5276;border:1px solid #AED6F1}
 .admin-btn-edit:hover{background:#2980B9;color:white;border-color:#2980B9}
 .admin-btn-del{background:#FDEDEC;color:#8B0000;border:1px solid #f5c6c6}
@@ -459,8 +461,8 @@ footer span{color:#888}
               <label>Ceinture actuelle <span class="req">*</span></label>
               <select id="f-ceinture-actuelle">
                 <option value="">— Sélectionner —</option>
-                <option>Blanche</option><option>Jaune</option>
-                <option>Orange</option>
+                <option>Blanche</option><option>Blanche–Jaune</option><option>Jaune</option>
+                <option>Jaune–Orange</option><option>Orange</option><option>Orange–Verte</option>
                 <option>Verte</option><option>Bleue</option><option>Marron</option>
               </select>
             </div>
@@ -468,8 +470,8 @@ footer span{color:#888}
               <label>Ceinture visée <span class="req">*</span></label>
               <select id="f-ceinture-visee">
                 <option value="">— Sélectionner —</option>
-                <option>Jaune</option>
-                <option>Orange</option>
+                <option>Blanche–Jaune</option><option>Jaune</option>
+                <option>Jaune–Orange</option><option>Orange</option><option>Orange–Verte</option>
                 <option>Verte</option><option>Bleue</option><option>Marron</option><option>Noire</option>
               </select>
             </div>
@@ -778,10 +780,15 @@ footer span{color:#888}
       </div>
       <div class="admin-form-section">Statut & options</div>
       <div class="form-group">
-        <label>Statut</label>
+        <label>Statut des inscriptions</label>
         <div class="admin-toggle-group" id="ae-status-group">
-          <button class="admin-toggle-btn active" data-val="disponible" onclick="selectToggle('ae-status-group',this)">Disponible</button>
-          <button class="admin-toggle-btn" data-val="complet" onclick="selectToggle('ae-status-group',this)">Complet</button>
+          <button class="admin-toggle-btn active" data-val="disponible" onclick="selectToggle('ae-status-group',this)">✅ Ouvertes</button>
+          <button class="admin-toggle-btn" data-val="ferme" onclick="selectToggle('ae-status-group',this)">🔒 Fermées</button>
+          <button class="admin-toggle-btn" data-val="complet" onclick="selectToggle('ae-status-group',this)">🔴 Complet</button>
+        </div>
+        <div style="margin-top:6px;font-size:12px;color:var(--muted)">
+          <strong>Fermées</strong> : les inscriptions sont désactivées même s'il reste des places.
+          <strong>Complet</strong> : plus aucune place disponible.
         </div>
       </div>
       <div class="form-group" style="margin-top:.75rem">
@@ -1055,8 +1062,8 @@ async function loadHeroCalendar() {
       const dateStr = ev.date_start
         ? new Date(ev.date_start).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})
         : '—';
-      const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
-      const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
+      const statusClass = ev.status === 'complet' ? 'status-paye' : ev.status === 'ferme' ? 'status-attente' : 'status-gratuit';
+      const statusLabel = ev.status === 'complet' ? 'Complet' : ev.status === 'ferme' ? '🔒 Fermé' : `${ev.spots_left || 0} places`;
       return `<tr>
         <td class="col-date">${dateStr}</td>
         <td class="col-event">${ev.title}</td>
@@ -1095,8 +1102,8 @@ async function enrichCalendarWithNames(evtDetails) {
       const dateStr = ev.date_start
         ? new Date(ev.date_start).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})
         : '—';
-      const statusClass = ev.status === 'complet' ? 'status-paye' : 'status-gratuit';
-      const statusLabel = ev.status === 'complet' ? 'Complet' : `${ev.spots_left || 0} places`;
+      const statusClass = ev.status === 'complet' ? 'status-paye' : ev.status === 'ferme' ? 'status-attente' : 'status-gratuit';
+      const statusLabel = ev.status === 'complet' ? 'Complet' : ev.status === 'ferme' ? '🔒 Fermé' : `${ev.spots_left || 0} places`;
       if (list.length === 0) {
         rows.push(`<tr>
           <td class="col-date">${dateStr}</td>
@@ -1726,17 +1733,19 @@ function renderAdminList() {
   }
   list.innerHTML=adminEvents.map(ev=>{
     const spotsClass=ev.spots===0?'spots-full':ev.spots<=5?'spots-low':'spots-ok';
-    const spotsTxt  =ev.spots===0?'Complet':ev.spots+' places';
+    const spotsTxt  =ev.status==='ferme'?'🔒 Fermé':ev.spots===0?'Complet':ev.spots+' places';
     const priceTxt  =ev.price===0?'Gratuit':'€'+ev.price;
-    return `<div class="admin-event-row${ev.status==='complet'?' sold-out':''}">
+    const rowClass  =ev.status==='complet'?' sold-out':ev.status==='ferme'?' sold-out':'';
+    return `<div class="admin-event-row${rowClass}">
       <div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>
       <div class="admin-event-info">
-        <div class="admin-event-name">${ev.title}${ev.featured?' ⭐':''}</div>
+        <div class="admin-event-name">${ev.title}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}</div>
         <div class="admin-event-meta">${typeLabels[ev.type]||ev.type} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${ev.lieu}</div>
       </div>
       <div class="admin-event-badges"><span class="admin-spots-badge ${spotsClass}">${spotsTxt}</span></div>
       <div class="admin-price-tag">${priceTxt}</div>
       <div class="admin-actions">
+        <button class="admin-btn-toggle" onclick="toggleInscriptions('${ev.id}','${ev.status}')" title="${ev.status==='ferme'?'Ouvrir les inscriptions':'Fermer les inscriptions'}">${ev.status==='ferme'?'🔓 Ouvrir':'🔒 Fermer'}</button>
         <button class="admin-btn-edit" onclick="openEventForm('${ev.id}')">✏ Modifier</button>
         <button class="admin-btn-del"  onclick="askDelete('${ev.id}')">🗑 Supprimer</button>
       </div>
@@ -1839,6 +1848,35 @@ async function saveEvent() {
   }
 }
 
+/* ── Ouverture / Fermeture rapide des inscriptions ──────── */
+async function toggleInscriptions(id, currentStatus) {
+  const ev = adminEvents.find(e => e.id === id);
+  if (!ev) return;
+  const newStatus = currentStatus === 'ferme' ? 'disponible' : 'ferme';
+  const label     = newStatus === 'ferme' ? 'fermer les inscriptions' : 'rouvrir les inscriptions';
+  if (!confirm(`Voulez-vous ${label} pour "${ev.title}" ?`)) return;
+  try {
+    const payload = {
+      title:      ev.title,      sub:        ev.sub,
+      type:       ev.type,       status:     newStatus,
+      date_start: ev.dateStart,  date_end:   ev.dateEnd   || null,
+      time_start: ev.timeStart  || null, time_end: ev.timeEnd || null,
+      lieu:       ev.lieu,       price:      ev.price,
+      spots_total:ev.spotsTotal, spots_left: ev.spots,
+      featured:   ev.featured,   is_grade:   ev.isGrade,
+      helloasso:  ev.price > 0,  helloasso_url: null,
+    };
+    const saved = await API.adminPut('/api/events/' + id, payload);
+    const norm  = normalizeEvent(saved);
+    const idx   = adminEvents.findIndex(e => e.id === norm.id);
+    if (idx >= 0) adminEvents[idx] = norm;
+    renderAdminList();
+    rebuildPublicPage();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
 /* ── Suppression événement ──────────────────────────── */
 function askDelete(id) {
   const ev=adminEvents.find(e=>e.id===id);
@@ -1904,16 +1942,21 @@ function buildCard(ev) {
     grade:       '<span class="badge badge-grade">Passage de grade</span>'
   }[ev.type]||'<span class="badge">Événement</span>';
   const sold     =ev.status==='complet';
-  const low      =!sold&&ev.spots>0&&ev.spots<=5;
-  const spotsTxt =sold?'0 place disponible':low?`⚡ ${ev.spots} places restantes`:`${ev.spots} places`;
-  const spotsClass=sold?'full':low?'low':'';
+  const ferme    =ev.status==='ferme';
+  const disabled =sold||ferme;
+  const low      =!disabled&&ev.spots>0&&ev.spots<=5;
+  const spotsTxt =sold ?'0 place disponible'
+                 :ferme?'Inscriptions fermées'
+                 :low  ?`⚡ ${ev.spots} places restantes`
+                       :`${ev.spots} places`;
+  const spotsClass=sold?'full':ferme?'full':low?'low':'';
   const priceTxt =ev.price===0?'<span class="free">Gratuit</span>':`<sup>€</sup>${ev.price}`;
-  const btnClass =sold?'disabled':ev.price===0?'outline':'primary';
-  const btnTxt   =sold?'Complet':"S'inscrire →";
+  const btnClass =disabled?'disabled':ev.price===0?'outline':'primary';
+  const btnTxt   =sold?'Complet':ferme?'Inscriptions fermées':"S'inscrire →";
   const featured =ev.featured?' featured':'';
-  const opacity  =sold?' style="opacity:.6;pointer-events:none;"':'';
-  const clickCard=sold?'':` onclick="openModal('${ev.id}')"`;
-  const clickBtn =sold?'':` onclick="event.stopPropagation();openModal('${ev.id}')"`;
+  const opacity  =disabled?' style="opacity:.6;pointer-events:none;"':'';
+  const clickCard=disabled?'':` onclick="openModal('${ev.id}')"`;
+  const clickBtn =disabled?'':` onclick="event.stopPropagation();openModal('${ev.id}')"`;
   const d        =fmtDate(ev.dateStart,ev.dateEnd);
   const horaires =ev.timeStart&&ev.timeEnd
     ? `<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${ev.timeStart} – ${ev.timeEnd}</div>`
