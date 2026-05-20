@@ -90,6 +90,9 @@ CREATE INDEX IF NOT EXISTS idx_reg_event_id ON registrations(event_id);
 CREATE INDEX IF NOT EXISTS idx_reg_email    ON registrations(email);
 CREATE INDEX IF NOT EXISTS idx_reg_status   ON registrations(paiement_status);
 
+-- Empêche un même email de s'inscrire deux fois au même événement
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reg_unique_email_event ON registrations(event_id, email);
+
 -- ──────────────────────────────────────────────────────────────
 -- TRIGGER : décrémenter spots_left à chaque inscription validée
 -- ──────────────────────────────────────────────────────────────
@@ -135,9 +138,9 @@ END;
 INSERT OR IGNORE INTO events
   (id, title, sub, type, status, date_start, date_end, time_start, time_end, lieu, price, spots_total, spots_left, featured, is_grade, helloasso)
 VALUES
-  ('stage1',    'Stage Été — Frappe & Déplacement',  'Tous niveaux · 2 jours intensifs', 'stage',       'disponible', '2025-07-05', '2025-07-06', '09:00', '18:00', 'Dojo du club, Bons-en-Chablais', 80,  20,  14, 1, 0, 0),
-  ('grade1',    'Passage de Grade — Ceintures',      'Toutes ceintures · Examinateurs FFK', 'grade',    'disponible', '2025-06-21', NULL,         '10:00', '13:00', 'Dojo du club, Bons-en-Chablais', 0,   30,  27, 0, 1, 0),
-  ('stage2',    'Stage Régional FFK',                'Ceintures oranges et plus · 1 jour', 'stage',     'disponible', '2025-07-12', NULL,         '09:00', '17:00', 'Annecy (lieu précisé par mail)',  40,  12,  12, 0, 0, 0),
-  ('seminar1',  'Séminaire Mental & Performance',    'Tous adhérents · Après-midi',        'seminaire', 'disponible', '2025-09-05', NULL,         '14:00', '18:00', 'Dojo du club',                   20,  20,   6, 0, 0, 0),
-  ('compet1',   'Championnat Régional',              'Sélection club · Compétiteurs',      'competition','complet',   '2025-03-22', NULL,         NULL,    NULL,    'Lyon',                           25,  30,   0, 0, 0, 0),
-  ('compet2',   'Interclub Amical Été',              'Tous niveaux · Ambiance détendue',   'competition','disponible','2025-07-19', NULL,         '10:00', '17:00', 'Thonon-les-Bains',               0,   30,  30, 0, 0, 0);
+  ('stage1',    'Stage Été — Frappe & Déplacement',  'Tous niveaux · 2 jours intensifs', 'stage',       'disponible', '2026-07-04', '2026-07-05', '09:00', '18:00', 'Dojo du club, Bons-en-Chablais', 80,  20,  14, 1, 0, 0),
+  ('grade1',    'Passage de Grade — Ceintures',      'Toutes ceintures · Examinateurs FFK', 'grade',    'disponible', '2026-06-20', NULL,         '10:00', '13:00', 'Dojo du club, Bons-en-Chablais', 0,   30,  27, 0, 1, 0),
+  ('stage2',    'Stage Régional FFK',                'Ceintures oranges et plus · 1 jour', 'stage',     'disponible', '2026-07-11', NULL,         '09:00', '17:00', 'Annecy (lieu précisé par mail)',  40,  12,  12, 0, 0, 0),
+  ('seminar1',  'Séminaire Mental & Performance',    'Tous adhérents · Après-midi',        'seminaire', 'disponible', '2026-09-05', NULL,         '14:00', '18:00', 'Dojo du club',                   20,  20,   6, 0, 0, 0),
+  ('compet1',   'Championnat Régional',              'Sélection club · Compétiteurs',      'competition','complet',   '2026-10-17', NULL,         NULL,    NULL,    'Lyon',                           25,  30,   0, 0, 0, 0),
+  ('compet2',   'Interclub Amical Été',              'Tous niveaux · Ambiance détendue',   'competition','disponible','2026-07-18', NULL,         '10:00', '17:00', 'Thonon-les-Bains',               0,   30,  30, 0, 0, 0);
