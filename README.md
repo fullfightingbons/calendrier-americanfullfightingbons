@@ -10,11 +10,13 @@ Déploiement automatique du Worker et de la base D1 via GitHub Actions.
 votre-repo/
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      ← pipeline CI/CD
+│       └── deploy.yml      ← pipeline CI/CD (doit être ici, pas à la racine !)
 ├── worker.js               ← API Cloudflare Worker
 ├── schema.sql              ← schéma base D1 (+ données démo)
+├── migration_add_ferme_status.sql     ← migration statut 'ferme'
+├── migration_add_unique_email_event.sql ← migration contrainte UNIQUE email+event
 ├── wrangler.toml           ← configuration Cloudflare
-└── index.html              ← votre front-end (peut rester statique)
+└── index.html              ← front-end SPA
 ```
 
 ---
@@ -53,6 +55,20 @@ Dans votre dépôt GitHub : **Settings → Secrets and variables → Actions →
 
 > ⚠️ Le token API doit avoir les permissions :
 > **Workers Scripts:Edit**, **D1:Edit**, **Account Settings:Read**
+
+### Secrets Worker supplémentaires (à injecter via `wrangler secret put`)
+
+Ces secrets ne doivent **jamais** apparaître dans le code source :
+
+```bash
+# Clé API Brevo pour l'envoi des emails de confirmation
+echo "VOTRE_CLE_BREVO" | wrangler secret put BREVO_API_KEY
+
+# Identifiants HelloAsso (si paiement en ligne)
+echo "VOTRE_CLIENT_ID" | wrangler secret put HELLOASSO_CLIENT_ID
+echo "VOTRE_CLIENT_SECRET" | wrangler secret put HELLOASSO_CLIENT_SECRET
+echo "votre-slug-organisation" | wrangler secret put HELLOASSO_ORG_SLUG
+```
 
 ---
 

@@ -199,9 +199,27 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   return { participant: participantEmail, club: clubEmail };
 }
 
-// ══════════════════════════════════════════════════════════════
-//  WORKER PRINCIPAL
-// ══════════════════════════════════════════════════════════════
+// ── Rate limiting simple par IP (en mémoire, par isolat Worker) ──
+const rateLimitMap = new Map();
+function isRateLimited(ip, limit = 10, windowMs = 60_000) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+  entry.count++;
+  rateLimitMap.set(ip, entry);
+  // Nettoyage périodique pour éviter les fuites mémoire
+  if (rateLimitMap.size > 5000) {
+    for (const [k, v] of rateLimitMap) {
+      if (now > v.resetAt) rateLimitMap.delete(k);
+    }
+  }
+  return entry.count > limit;
+}
+
+
 export default {
   async fetch(request, env) {
     const url    = new URL(request.url);
@@ -388,6 +406,12 @@ export default {
 
         // POST /api/registrations [public]
         if (method === 'POST' && !resId) {
+          // Rate limiting : 10 inscriptions max par IP par minute
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(clientIp, 10, 60_000)) {
+            return err('Trop de requêtes. Veuillez patienter avant de réessayer.', 429);
+          }
+
           const body = await request.json();
           validateRegistration(body);
           const ev = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
@@ -395,6 +419,12 @@ export default {
           if (ev.status === 'complet') return err('Événement complet', 409);
           if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
           if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
+
+          // Vérifier qu'il n'existe pas déjà une inscription pour cet email + cet événement
+          const existing = await env.DB.prepare(
+            `SELECT id FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+          ).bind(body.event_id, body.email.toLowerCase().trim()).first();
+          if (existing) return err('Une inscription existe déjà pour cet email à cet événement.', 409);
 
           const paiementStatus = ev.price === 0
             ? 'gratuit'
@@ -411,7 +441,7 @@ export default {
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           `).bind(
             body.event_id, body.nom, body.prenom, body.date_naissance,
-            body.telephone, body.email,
+            body.telephone, body.email.toLowerCase().trim(),
             body.licence_ffk       ?? null, body.is_mineur ? 1 : 0,
             body.categorie         ?? null, body.niveau    ?? null, body.regime ?? null,
             body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
