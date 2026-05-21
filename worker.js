@@ -211,6 +211,12 @@ function validateRegistration(body) {
   }
 }
 
+function isUniqueConstraintError(error, indexName) {
+  const message = String(error?.message || error || '');
+  return message.includes('UNIQUE constraint failed')
+    || (indexName && message.includes(indexName));
+}
+
 // ── HelloAsso OAuth2 ───────────────────────────────────────────
 async function getHelloAssoToken(env) {
   const resp = await fetch('https://api.helloasso.com/oauth2/token', {
@@ -621,6 +627,7 @@ export default {
 
           const body = await request.json();
           validateRegistration(body);
+          const normalizedEmail = String(body.email || '').toLowerCase().trim();
           const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
           const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
           if (!ev)                     return err('Événement introuvable', 404);
@@ -630,39 +637,64 @@ export default {
 
           // Vérifier qu'il n'existe pas déjà une inscription pour cet email + cet événement
           const existing = await env.DB.prepare(
-            `SELECT id FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
-          ).bind(body.event_id, body.email.toLowerCase().trim()).first();
-          if (existing) return err('Une inscription existe déjà pour cet email à cet événement.', 409);
+            `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+          ).bind(body.event_id, normalizedEmail).first();
+          if (existing) {
+            return json({
+              error: 'Une inscription existe déjà pour cet email à cet événement.',
+              code: 'duplicate_registration',
+              existing_id: existing.id,
+              paiement_status: existing.paiement_status,
+              montant: existing.montant,
+            }, 409);
+          }
 
           const paiementStatus = ev.price === 0
             ? 'gratuit'
             : 'en_attente';
 
-          const info = await env.DB.prepare(`
-            INSERT INTO registrations (
-              event_id, nom, prenom, date_naissance, telephone, email,
-              licence_ffk, is_mineur, categorie, niveau, regime,
-              ceinture_actuelle, ceinture_visee,
-              parent_nom, parent_prenom, parent_tel,
-              message, certif_medical, droit_image, reglement_ok,
-              montant, paiement_status, helloasso_ref
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          `).bind(
-            body.event_id, body.nom, body.prenom, body.date_naissance,
-            body.telephone, body.email.toLowerCase().trim(),
-            body.licence_ffk       ?? null, body.is_mineur ? 1 : 0,
-            body.categorie         ?? null, body.niveau    ?? null, body.regime ?? null,
-            body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
-            body.parent_nom        ?? null, body.parent_prenom  ?? null, body.parent_tel ?? null,
-            body.message           ?? null,
-            body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
-            ev.price, paiementStatus, body.helloasso_ref ?? null,
-          ).run();
+          let info;
+          try {
+            info = await env.DB.prepare(`
+              INSERT INTO registrations (
+                event_id, nom, prenom, date_naissance, telephone, email,
+                licence_ffk, is_mineur, categorie, niveau, regime,
+                ceinture_actuelle, ceinture_visee,
+                parent_nom, parent_prenom, parent_tel,
+                message, certif_medical, droit_image, reglement_ok,
+                montant, paiement_status, helloasso_ref
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            `).bind(
+              body.event_id, body.nom, body.prenom, body.date_naissance,
+              body.telephone, normalizedEmail,
+              body.licence_ffk       ?? null, body.is_mineur ? 1 : 0,
+              body.categorie         ?? null, body.niveau    ?? null, body.regime ?? null,
+              body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
+              body.parent_nom        ?? null, body.parent_prenom  ?? null, body.parent_tel ?? null,
+              body.message           ?? null,
+              body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
+              ev.price, paiementStatus, body.helloasso_ref ?? null,
+            ).run();
+          } catch (insertError) {
+            if (!isUniqueConstraintError(insertError, 'idx_reg_unique_email_event')) {
+              throw insertError;
+            }
+            const concurrent = await env.DB.prepare(
+              `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+            ).bind(body.event_id, normalizedEmail).first();
+            return json({
+              error: 'Une inscription existe déjà pour cet email à cet événement.',
+              code: 'duplicate_registration',
+              existing_id: concurrent?.id ?? null,
+              paiement_status: concurrent?.paiement_status ?? paiementStatus,
+              montant: concurrent?.montant ?? ev.price,
+            }, 409);
+          }
 
           await syncEventAvailability(env.DB, body.event_id);
 
           const regData = {
-            nom: body.nom, prenom: body.prenom, email: body.email,
+            nom: body.nom, prenom: body.prenom, email: normalizedEmail,
             telephone: body.telephone, date_naissance: body.date_naissance,
             categorie: body.categorie ?? null, niveau: body.niveau ?? null,
             licence_ffk: body.licence_ffk ?? null, message: body.message ?? null,

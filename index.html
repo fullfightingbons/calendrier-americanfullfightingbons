@@ -868,7 +868,14 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    if (!r.ok) {
+      const payload = await r.json().catch(() => ({}));
+      const error = new Error(payload.error || r.statusText);
+      error.status = r.status;
+      error.code = payload.code || null;
+      error.payload = payload;
+      throw error;
+    }
     return r.json();
   },
 
@@ -958,11 +965,15 @@ async function handleCheckoutReturn() {
       sessionStorage.removeItem('checkout_processed');
 
     } catch(e) {
-
       console.error(e);
-
       sessionStorage.removeItem('checkout_processed');
-
+      if (e?.status === 409 && e?.code === 'duplicate_registration') {
+        showReturnSuccess(e?.payload?.existing_id || 'déjà enregistrée', eventId, {
+          paiement_status: e?.payload?.paiement_status || 'en_attente',
+          emails: null,
+        });
+        return;
+      }
       showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
     }
 
