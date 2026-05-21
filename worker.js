@@ -5,12 +5,180 @@
  * ══════════════════════════════════════════════════════════════
  */
 
+import INDEX_HTML from './index.html';
+
 // ── Classe d'erreur métier ─────────────────────────────────────
 class ApiError extends Error {
   constructor(message, status = 400) {
     super(message);
     this.status = status;
   }
+}
+
+function securityHeaders(extra = {}) {
+  return {
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    ...extra,
+  };
+}
+
+function secureEquals(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+function getAllowedOrigins(env, requestUrl) {
+  const configured = String(env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return new Set([requestUrl.origin, ...configured]);
+}
+
+function buildCorsHeaders(request, env, requestUrl) {
+  const origin = String(request.headers.get('Origin') || '').trim();
+  const allowedOrigins = getAllowedOrigins(env, requestUrl);
+  const allowOrigin = origin && allowedOrigins.has(origin) ? origin : requestUrl.origin;
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Vary': 'Origin',
+  };
+}
+
+const ADMIN_SESSION_COOKIE = 'affbc_calendar_session';
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const CLUB_CONTACT_EMAIL = 'fullfightingbons@gmail.com';
+const MAIL_SENDER_EMAIL = 'contact@americanfullfightingbons.fr';
+
+function parseCookies(request) {
+  const raw = request.headers.get('Cookie') || '';
+  return Object.fromEntries(
+    raw.split(';')
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const index = chunk.indexOf('=');
+        if (index < 0) return [chunk, ''];
+        return [chunk.slice(0, index), decodeURIComponent(chunk.slice(index + 1))];
+      })
+  );
+}
+
+function toBase64Url(value) {
+  return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function fromBase64Url(value) {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
+  return atob(padded);
+}
+
+function bytesToBase64Url(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function hmacSha256Base64Url(secret, value) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
+  return bytesToBase64Url(signature);
+}
+
+function getSessionSecret(env) {
+  return String(env.SESSION_SECRET || env.ADMIN_TOKEN || '');
+}
+
+async function createSessionToken(payload, env) {
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signature = await hmacSha256Base64Url(getSessionSecret(env), encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+async function parseSessionToken(token, env) {
+  const [payload, signature] = String(token || '').split('.');
+  if (!payload || !signature) return null;
+  const expected = await hmacSha256Base64Url(getSessionSecret(env), payload);
+  if (!secureEquals(expected, signature)) return null;
+  try {
+    return JSON.parse(fromBase64Url(payload));
+  } catch {
+    return null;
+  }
+}
+
+function buildSessionCookie(token) {
+  return `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${Math.floor(ADMIN_SESSION_TTL_MS / 1000)}; SameSite=Lax; Secure`;
+}
+
+function clearSessionCookie() {
+  return `${ADMIN_SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax; Secure`;
+}
+
+async function loadActiveRegistrationCount(db, eventId) {
+  const result = await db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM registrations
+     WHERE event_id = ?
+       AND paiement_status IN ('en_attente', 'paye', 'gratuit')`
+  ).bind(eventId).first();
+  return Number(result?.total || 0);
+}
+
+function withComputedEventState(event, activeRegistrations) {
+  const spotsTotal = Number(event?.spots_total || 0);
+  const spotsLeft = Math.max(0, spotsTotal - activeRegistrations);
+  const forcedClosed = event?.status === 'ferme';
+  const status = forcedClosed
+    ? 'ferme'
+    : spotsLeft <= 0
+      ? 'complet'
+      : 'disponible';
+  return {
+    ...event,
+    spots_total: spotsTotal,
+    spots_left: spotsLeft,
+    status,
+    registrations_count: activeRegistrations,
+  };
+}
+
+async function hydrateEvent(db, event) {
+  const activeRegistrations = await loadActiveRegistrationCount(db, event.id);
+  return withComputedEventState(event, activeRegistrations);
+}
+
+async function hydrateEvents(db, events) {
+  return Promise.all((events || []).map((event) => hydrateEvent(db, event)));
+}
+
+async function syncEventAvailability(db, eventId) {
+  const event = await db.prepare(`SELECT * FROM events WHERE id = ?`).bind(eventId).first();
+  if (!event) return null;
+  const hydrated = await hydrateEvent(db, event);
+  await db.prepare(
+    `UPDATE events
+     SET spots_left = ?, status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+     WHERE id = ?`
+  ).bind(hydrated.spots_left, hydrated.status, eventId).run();
+  return hydrated;
 }
 
 // ── Validation événement ───────────────────────────────────────
@@ -106,7 +274,7 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        sender:  { name: 'American Full Fighting Bons-en-Chablais', email: 'contact@americanfullfightingbons.fr' },
+        sender:  { name: 'AMERICAN FULL FIGHTING BONS EN CHABLAIS', email: MAIL_SENDER_EMAIL },
         to:      [{ email: to, name: toName }],
         subject,
         htmlContent: html,
@@ -127,8 +295,8 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
 }
 
 async function sendConfirmationEmails(env, { reg, ev }) {
-  const CLUB_EMAIL = 'contact@americanfullfightingbons.fr';
-  const CLUB_NAME  = 'American Full Fighting Bons-en-Chablais';
+  const CLUB_EMAIL = CLUB_CONTACT_EMAIL;
+  const CLUB_NAME  = 'AMERICAN FULL FIGHTING BONS EN CHABLAIS';
   const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
   const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const isConfirmed = reg.paiement_status === 'gratuit' || reg.paiement_status === 'paye';
@@ -226,49 +394,48 @@ export default {
     const path   = url.pathname;
     const method = request.method.toUpperCase();
 
-    // ── Servir index.html depuis GitHub ───────────────────────
+    // ── Servir index.html embarqué dans le Worker ─────────────
     if ((method === 'GET' || method === 'HEAD') && (path === '/' || path === '' || path === '/index.html')) {
-      const htmlResp = await fetch(
-        'https://raw.githubusercontent.com/fullfightingbons/calendrier-americanfullfightingbons/main/index.html',
-        { cf: { cacheEverything: true, cacheTtl: 300 } }
-      );
-      const html = await htmlResp.text();
-      return new Response(html, {
+      return new Response(INDEX_HTML, {
         status: 200,
-        headers: {
+        headers: securityHeaders({
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'public, max-age=300',
-        },
+        }),
       });
     }
 
     // ── CORS ───────────────────────────────────────────────────
-    const corsHeaders = {
-      'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
+    const corsHeaders = buildCorsHeaders(request, env, url);
     if (method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return new Response(null, { status: 204, headers: securityHeaders(corsHeaders) });
     }
 
     // ── Helpers internes ───────────────────────────────────────
     const json = (data, status = 200) =>
       new Response(JSON.stringify(data), {
         status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: securityHeaders({ ...corsHeaders, 'Content-Type': 'application/json' }),
       });
 
     const err = (msg, status = 400) => json({ error: msg }, status);
 
-    const isAdmin = () => {
-      const auth  = request.headers.get('Authorization') || '';
-      const token = auth.replace('Bearer ', '').trim();
-      return token !== '' && token === (env.ADMIN_TOKEN || '');
+    const hasAdminSession = async () => {
+      const token = parseCookies(request)[ADMIN_SESSION_COOKIE];
+      if (!token) return false;
+      const session = await parseSessionToken(token, env);
+      return !!session && Number(session.expiresAt || 0) > Date.now() && session.role === 'admin';
     };
 
-    const requireAdmin = () => {
-      if (!isAdmin()) throw new ApiError('Non autorisé', 401);
+    const isAdmin = async () => {
+      const auth  = request.headers.get('Authorization') || '';
+      const token = auth.replace('Bearer ', '').trim();
+      if (token !== '' && secureEquals(token, env.ADMIN_TOKEN || '')) return true;
+      return hasAdminSession();
+    };
+
+    const requireAdmin = async () => {
+      if (!(await isAdmin())) throw new ApiError('Non autorisé', 401);
     };
 
     const genId = (prefix = 'evt') => `${prefix}${Date.now().toString(36)}`;
@@ -279,6 +446,43 @@ export default {
     const subRes   = segments[2];
 
     try {
+      if (resource === 'auth') {
+        if (method === 'POST' && resId === 'login') {
+          const body = await request.json();
+          const password = String(body?.password || '').trim();
+          if (!password || !secureEquals(password, env.ADMIN_TOKEN || '')) {
+            return err('Mot de passe incorrect', 401);
+          }
+          const token = await createSessionToken(
+            { role: 'admin', expiresAt: Date.now() + ADMIN_SESSION_TTL_MS },
+            env
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: securityHeaders({
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'Set-Cookie': buildSessionCookie(token),
+            }),
+          });
+        }
+
+        if (method === 'GET' && resId === 'session') {
+          return json({ ok: await isAdmin() });
+        }
+
+        if (method === 'POST' && resId === 'logout') {
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: securityHeaders({
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'Set-Cookie': clearSessionCookie(),
+            }),
+          });
+        }
+      }
+
       // ══════════════════════════════════════════════════════════
       //  EVENTS
       // ══════════════════════════════════════════════════════════
@@ -288,7 +492,7 @@ export default {
           const { results } = await env.DB.prepare(
             `SELECT * FROM events ORDER BY date_start ASC`
           ).all();
-          return json(results);
+          return json(await hydrateEvents(env.DB, results));
         }
 
         if (method === 'GET' && resId) {
@@ -296,14 +500,11 @@ export default {
             `SELECT * FROM events WHERE id = ?`
           ).bind(resId).first();
           if (!ev) return err('Événement introuvable', 404);
-          const count = await env.DB.prepare(
-            `SELECT COUNT(*) as total FROM registrations WHERE event_id = ? AND paiement_status IN ('paye','gratuit')`
-          ).bind(resId).first();
-          return json({ ...ev, registrations_count: count?.total ?? 0 });
+          return json(await hydrateEvent(env.DB, ev));
         }
 
         if (method === 'POST') {
-          requireAdmin();
+          await requireAdmin();
           const body = await request.json();
           const id   = body.id || genId('evt');
           validateEvent(body);
@@ -322,12 +523,12 @@ export default {
             body.featured  ? 1 : 0, body.is_grade  ? 1 : 0,
             body.helloasso ? 1 : 0, body.helloasso_url ?? null,
           ).run();
-          const created = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(id).first();
+          const created = await syncEventAvailability(env.DB, id);
           return json(created, 201);
         }
 
         if (method === 'PUT' && resId) {
-          requireAdmin();
+          await requireAdmin();
           const body = await request.json();
           validateEvent(body);
           await env.DB.prepare(`
@@ -347,13 +548,13 @@ export default {
             body.helloasso ? 1 : 0, body.helloasso_url ?? null,
             resId,
           ).run();
-          const updated = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(resId).first();
+          const updated = await syncEventAvailability(env.DB, resId);
           if (!updated) return err('Événement introuvable', 404);
           return json(updated);
         }
 
         if (method === 'DELETE' && resId) {
-          requireAdmin();
+          await requireAdmin();
           const info = await env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(resId).run();
           if (info.changes === 0) return err('Événement introuvable', 404);
           return json({ deleted: resId });
@@ -368,10 +569,16 @@ export default {
         // GET /api/registrations/public [public]
         if (method === 'GET' && resId === 'public') {
           const { results } = await env.DB.prepare(`
-            SELECT r.nom, r.prenom, r.paiement_status, e.title as event_title, e.date_start
-            FROM registrations r
-            JOIN events e ON e.id = r.event_id
+            SELECT e.id AS event_id,
+                   e.title AS event_title,
+                   e.date_start,
+                   COUNT(r.id) AS registrations_count
+            FROM events e
+            LEFT JOIN registrations r
+              ON r.event_id = e.id
+             AND r.paiement_status IN ('en_attente', 'paye', 'gratuit')
             WHERE e.date_start >= date('now')
+            GROUP BY e.id, e.title, e.date_start
             ORDER BY e.date_start ASC
             LIMIT 20
           `).all();
@@ -380,7 +587,7 @@ export default {
 
         // GET /api/registrations [admin]
         if (method === 'GET' && !resId) {
-          requireAdmin();
+          await requireAdmin();
           const eventFilter  = url.searchParams.get('event_id');
           const statusFilter = url.searchParams.get('status');
           let query  = `SELECT r.*, e.title as event_title FROM registrations r JOIN events e ON e.id = r.event_id WHERE 1=1`;
@@ -395,7 +602,7 @@ export default {
 
         // GET /api/registrations/:id [admin]
         if (method === 'GET' && resId && !subRes) {
-          requireAdmin();
+          await requireAdmin();
           const reg = await env.DB.prepare(
             `SELECT r.*, e.title as event_title, e.price as event_price
              FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`
@@ -414,7 +621,8 @@ export default {
 
           const body = await request.json();
           validateRegistration(body);
-          const ev = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
+          const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
+          const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
           if (!ev)                     return err('Événement introuvable', 404);
           if (ev.status === 'complet') return err('Événement complet', 409);
           if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
@@ -451,17 +659,7 @@ export default {
             ev.price, paiementStatus, body.helloasso_ref ?? null,
           ).run();
 
-          // Les inscriptions "paye"/"gratuit" décrémentent déjà les places
-          // via le trigger D1. On ne décrémente manuellement que "en_attente".
-          if (paiementStatus === 'en_attente') {
-            await env.DB.prepare(`
-              UPDATE events
-              SET
-                spots_left = MAX(0, spots_left - 1),
-                status = CASE WHEN spots_left - 1 <= 0 THEN 'complet' ELSE status END
-              WHERE id = ?
-            `).bind(body.event_id).run();
-          }
+          await syncEventAvailability(env.DB, body.event_id);
 
           const regData = {
             nom: body.nom, prenom: body.prenom, email: body.email,
@@ -484,23 +682,28 @@ export default {
           
         // PUT /api/registrations/:id/status [admin]
         if (method === 'PUT' && resId && subRes === 'status') {
-          requireAdmin();
+          await requireAdmin();
           const body = await request.json();
           const validStatuses = ['en_attente', 'paye', 'gratuit', 'annule'];
           if (!validStatuses.includes(body.paiement_status)) {
             return err(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
           }
+          const registration = await env.DB.prepare(
+            `SELECT event_id FROM registrations WHERE id = ?`
+          ).bind(resId).first();
+          if (!registration) return err('Inscription introuvable', 404);
           const info = await env.DB.prepare(`
             UPDATE registrations SET paiement_status = ?, helloasso_ref = COALESCE(?, helloasso_ref) WHERE id = ?
           `).bind(body.paiement_status, body.helloasso_ref ?? null, resId).run();
           if (info.changes === 0) return err('Inscription introuvable', 404);
+          await syncEventAvailability(env.DB, registration.event_id);
           return json({ id: resId, paiement_status: body.paiement_status });
         }
 
         // DELETE /api/registrations/:id [admin]
         // ── Supprime l'inscription ET restitue une place sur l'événement ──
         if (method === 'DELETE' && resId) {
-          requireAdmin();
+          await requireAdmin();
 
           const reg = await env.DB.prepare(
             `SELECT event_id, paiement_status FROM registrations WHERE id = ?`
@@ -512,16 +715,7 @@ export default {
           ).bind(resId).run();
           if (info.changes === 0) return err('Inscription introuvable', 404);
 
-          // Restituer une place si l'inscription était active
-          if (['paye', 'gratuit', 'en_attente'].includes(reg.paiement_status)) {
-            await env.DB.prepare(`
-              UPDATE events
-              SET
-                spots_left = MIN(spots_total, spots_left + 1),
-                status = CASE WHEN status = 'complet' THEN 'disponible' ELSE status END
-              WHERE id = ?
-            `).bind(reg.event_id).run();
-          }
+          await syncEventAvailability(env.DB, reg.event_id);
 
           return json({ deleted: Number(resId), event_id: reg.event_id });
         }
@@ -536,11 +730,13 @@ export default {
         if (!event_id || !nom || !prenom || !email) {
           return err('Champs requis : event_id, nom, prenom, email');
         }
-        const ev = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first();
+        const rawEvent = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first();
+        const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
         if (!ev)                     return err('Evenement introuvable', 404);
         if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
         if (ev.status === 'complet') return err('Evenement complet', 409);
         if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
+        if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
 
         const origin    = url.origin;
         const returnUrl = `${origin}/?checkout=success&event_id=${event_id}`;
