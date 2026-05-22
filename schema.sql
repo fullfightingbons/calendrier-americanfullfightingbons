@@ -123,16 +123,6 @@ BEGIN
 END;
 
 -- ──────────────────────────────────────────────────────────────
--- TRIGGER : updated_at automatique sur events
--- ──────────────────────────────────────────────────────────────
-CREATE TRIGGER IF NOT EXISTS trg_events_updated
-  AFTER UPDATE ON events
-BEGIN
-  UPDATE events SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
-  WHERE id = NEW.id;
-END;
-
--- ──────────────────────────────────────────────────────────────
 -- DONNÉES INITIALES — événements démo (copiés depuis index.html)
 -- ──────────────────────────────────────────────────────────────
 INSERT OR IGNORE INTO events
