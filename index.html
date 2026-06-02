@@ -41,6 +41,9 @@
 --shadow-red:0 0 30px rgba(225,6,0,.25);
 --shadow-card:0 10px 40px rgba(0,0,0,.45);
 }
+.affbc-links{background:#0b0b0b;border-bottom:1px solid #242424;padding:10px 2rem;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.affbc-links a{font-family:var(--font-body);font-size:12px;font-weight:600;color:#aaa;text-decoration:none;border:1px solid #333;border-radius:999px;padding:6px 12px;background:#111}
+.affbc-links a:hover,.affbc-links a[aria-current="page"]{color:white;border-color:var(--red);background:var(--red)}
 /* HEADER */
 header{background:var(--dark);color:var(--white);padding:0 2rem}
 .header-inner{max-width:900px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px}
@@ -306,6 +309,14 @@ footer span{color:#888}
 </style>
 </head>
 <body>
+
+<nav class="affbc-links" aria-label="Navigation entre les services AFFBC">
+  <a href="https://americanfullfightingbons.fr/">Site du club</a>
+  <a href="https://inscription.americanfullfightingbons.fr/">Inscription</a>
+  <a href="https://calendrier.americanfullfightingbons.fr/" aria-current="page">Calendrier</a>
+  <a href="https://boutique.americanfullfightingbons.fr/">Boutique</a>
+  <a href="https://gestion.americanfullfightingbons.fr/">Gestion</a>
+</nav>
 
 <header>
   <div class="header-inner">

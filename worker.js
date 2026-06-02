@@ -20,6 +20,9 @@ function securityHeaders(extra = {}) {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     ...extra,
   };
 }
@@ -401,13 +404,13 @@ export default {
     const method = request.method.toUpperCase();
 
     if ((method === 'GET' || method === 'HEAD') && path === '/api/health') {
-      return new Response(JSON.stringify({ ok: true, service: 'calendrier-americanfullfightingbons', date: new Date().toISOString() }), {
+      return new Response(JSON.stringify({ ok: true, data: { service: 'calendrier-americanfullfightingbons', date: new Date().toISOString() } }), {
         headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
       });
     }
 
     if ((method === 'GET' || method === 'HEAD') && path === '/api/version') {
-      return new Response(JSON.stringify({ service: 'calendrier-americanfullfightingbons', version: '1.0.0' }), {
+      return new Response(JSON.stringify({ ok: true, data: { service: 'calendrier-americanfullfightingbons', version: '1.0.0' } }), {
         headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
       });
     }
