@@ -400,6 +400,30 @@ export default {
     const path   = url.pathname;
     const method = request.method.toUpperCase();
 
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/health') {
+      return new Response(JSON.stringify({ ok: true, service: 'calendrier-americanfullfightingbons', date: new Date().toISOString() }), {
+        headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+      });
+    }
+
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/version') {
+      return new Response(JSON.stringify({ service: 'calendrier-americanfullfightingbons', version: '1.0.0' }), {
+        headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+      });
+    }
+
+    if ((method === 'GET' || method === 'HEAD') && path === '/robots.txt') {
+      return new Response('User-agent: *\nAllow: /\n\nSitemap: https://calendrier.americanfullfightingbons.fr/sitemap.xml\n', {
+        headers: securityHeaders({ 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }),
+      });
+    }
+
+    if ((method === 'GET' || method === 'HEAD') && path === '/sitemap.xml') {
+      return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://calendrier.americanfullfightingbons.fr/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n</urlset>\n', {
+        headers: securityHeaders({ 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }),
+      });
+    }
+
     // ── Servir index.html embarqué dans le Worker ─────────────
     if ((method === 'GET' || method === 'HEAD') && (path === '/' || path === '' || path === '/index.html')) {
       return new Response(INDEX_HTML, {
