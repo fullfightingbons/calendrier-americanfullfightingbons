@@ -5,11 +5,13 @@
 		"module": "esnext",
 		"moduleResolution": "bundler",
 		"types": ["./worker-configuration.d.ts"],
+		"allowJs": true,
+		"checkJs": false,
 		"noEmit": true,
 		"isolatedModules": true,
 		"forceConsistentCasingInFileNames": true,
 		"skipLibCheck": true,
 		"strict": true
 	},
-	"include": ["src"]
+	"include": ["worker.js"]
 }
