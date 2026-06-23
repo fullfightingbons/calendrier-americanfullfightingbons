@@ -416,7 +416,30 @@ export {
 };
 
 
+// ── Suppression automatique des événements expirés (cron J+5) ──
+async function purgeExpiredEvents(env) {
+  // Supprime les événements dont la date de fin (ou de début si pas de date_end)
+  // est dépassée depuis plus de 5 jours.
+  // Les inscriptions liées sont supprimées automatiquement via ON DELETE CASCADE.
+  const result = await env.DB.prepare(`
+    DELETE FROM events
+    WHERE (
+      CASE
+        WHEN date_end IS NOT NULL AND date_end != ''
+          THEN date_end
+        ELSE date_start
+      END
+    ) < date('now', '-5 days')
+  `).run();
+  console.log(`[cron] purgeExpiredEvents: ${result.changes ?? 0} événement(s) supprimé(s)`);
+}
+
 export default {
+  // ── Cron trigger — exécuté selon wrangler.toml [triggers] crons ──
+  async scheduled(_event, env, _ctx) {
+    await purgeExpiredEvents(env);
+  },
+
   async fetch(request, env) {
     const url    = new URL(request.url);
     const path   = url.pathname;
@@ -555,9 +578,12 @@ export default {
       if (resource === 'events') {
 
         if (method === 'GET' && !resId) {
-          const { results } = await env.DB.prepare(
-            `SELECT * FROM events ORDER BY date_start ASC`
-          ).all();
+          const { results } = await env.DB.prepare(`
+            SELECT * FROM events
+            ORDER BY
+              CASE WHEN date_start >= date('now') THEN 0 ELSE 1 END ASC,
+              date_start ASC
+          `).all();
           return json(await hydrateEvents(env.DB, results));
         }
 
