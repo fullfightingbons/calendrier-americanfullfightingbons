@@ -56,10 +56,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: echo "${{ secrets.CF_ADMIN_TOKEN }}" | wrangler secret put ADMIN_TOKEN
+        # printf evite le \n final qu'ajoute echo (sinon secret stocke avec \n en trop)
+        run: printf '%s' "${{ secrets.CF_ADMIN_TOKEN }}" | wrangler secret put ADMIN_TOKEN
 
       - name: Injecter le secret SESSION_SECRET
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: echo "${{ secrets.CF_SESSION_SECRET }}" | wrangler secret put SESSION_SECRET
+        run: printf '%s' "${{ secrets.CF_SESSION_SECRET }}" | wrangler secret put SESSION_SECRET
