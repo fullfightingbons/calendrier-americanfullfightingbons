@@ -591,7 +591,7 @@ export default {
         if (method === 'POST' && resId === 'login') {
           const body = await request.json();
           const password = String(body?.password || '').trim();
-          if (!password || !secureEquals(password, env.ADMIN_TOKEN || '')) {
+          if (!password || !secureEquals(password, String(env.ADMIN_TOKEN || '').trim())) {
             return err('Mot de passe incorrect', 401);
           }
           const token = await createSessionToken(
