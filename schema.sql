@@ -5,7 +5,6 @@
 --  Appliquez le schéma : wrangler d1 execute aff-bons --file=schema.sql
 -- ══════════════════════════════════════════════════════════════
 
-PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
 -- ──────────────────────────────────────────────────────────────
