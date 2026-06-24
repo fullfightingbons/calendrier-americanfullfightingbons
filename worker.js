@@ -1,170 +1,45 @@
-// ============================================================
-//  AFFB Boutique — Cloudflare Worker v2
-//  Nouveautés :
-//    • Panel admin protégé (login JWT-like, token D1)
-//    • CRUD produits (prix, stock, ajout, suppression)
-//    • Upload image produit (Cloudflare R2 ou base64 fallback)
-//    • Checkout HelloAsso (API v5)
-//    • Email facture PDF via Brevo (Sendinblue)
-// ============================================================
+/**
+ * ══════════════════════════════════════════════════════════════
+ *  AMERICAN FULL FIGHTING — BONS-EN-CHABLAIS
+ *  Cloudflare Worker — sert index.html + API REST D1
+ * ══════════════════════════════════════════════════════════════
+ */
 
-import HTML       from './index.html';
-import ADMIN_HTML from './admin.html';
-import { buildHelloAssoPaymentState } from './helloasso-helpers.mjs';
+import INDEX_HTML from './index.html';
 
-const CLUB_CONTACT_EMAIL = 'fullfightingbons@gmail.com';
-const MAIL_SENDER_EMAIL = 'contact@americanfullfightingbons.fr';
+// Logo compressé (WebP, ~24 Ko) — servi via la route /logo.webp ci-dessous.
+// Remplace l'ancien Logo.jpg (2,6 Mo) hot-linké depuis raw.githubusercontent.com.
+const LOGO_WEBP_BASE64 = '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';
 
-// ── Variables d'environnement attendues (dashboard Cloudflare) ──
-// ADMIN_PASSWORD   : mot de passe brut de l'administrateur
-// HELLOASSO_CLIENT_ID     : OAuth2 client_id HelloAsso
-// HELLOASSO_CLIENT_SECRET : OAuth2 client_secret HelloAsso
-// HELLOASSO_ORG_SLUG      : slug de l'organisation HelloAsso (ex: "affb-bons")
-// HELLOASSO_RETURN_URL    : URL de retour après paiement
-// HELLOASSO_ERROR_URL     : URL en cas d'erreur de paiement
-// BREVO_API_KEY    : clé API Brevo (ex-Sendinblue)
-// BREVO_FROM_EMAIL : email expéditeur (doit être vérifié dans Brevo)
-// BREVO_FROM_NAME  : nom expéditeur (ex: "AFFB Boutique")
-// R2_BUCKET (binding Wrangler) : bucket R2 pour les images
-
-// ── Router léger ─────────────────────────────────────────────────
-function route(method, pathname, handler, adminOnly = false) {
-  return { method, pathname, handler, adminOnly };
+// ── Classe d'erreur métier ─────────────────────────────────────
+class ApiError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
 }
 
-const routes = [
-  // ── Frontend ──────────────────────────────────────────────────
-  route('GET',   '/',                        serveHTML),
-  route('GET',   '/admin',                   serveAdminHTML),
-
-  // ── Auth admin ────────────────────────────────────────────────
-  route('POST',  '/api/admin/login',         adminLogin),
-  route('POST',  '/api/admin/logout',        adminLogout),
-
-  // ── Produits publics ──────────────────────────────────────────
-  route('GET',   '/api/products',            getProducts),
-  route('GET',   '/api/products/:id',        getProduct),
-
-  // ── Produits admin ────────────────────────────────────────────
-  route('GET',   '/api/admin/products',      getAdminProducts, true),
-  route('POST',  '/api/admin/products',      createProduct,    true),
-  route('PATCH', '/api/admin/products/:id',  updateProduct,    true),
-  route('DELETE','/api/admin/products/:id',  deleteProduct,    true),
-  route('POST',  '/api/admin/products/:id/image', uploadImage, true),
-
-  // ── Commandes ─────────────────────────────────────────────────
-  route('POST',  '/api/orders',              createOrder),
-  route('GET',   '/api/orders/:id',          getOrder),
-  route('PATCH', '/api/orders/:id',          updateOrderStatus, true),
-  route('GET',   '/api/admin/orders',        getAdminOrders,    true),
-  route('GET',   '/api/admin/stats',         getStats,          true),
-
-  // ── HelloAsso ─────────────────────────────────────────────────
-  route('POST',  '/api/checkout/:orderId',   createCheckout),
-  route('GET',   '/api/checkout/callback',   checkoutCallback),
-
-  // ── Brevo invoice ─────────────────────────────────────────────
-  route('POST',  '/api/admin/invoice/:orderId', sendInvoice,   true),
-
-  // ── Images produits (servies depuis R2) ───────────────────────
-  route('GET',   '/images/:key',               serveImage),
-
-  // ── Synchronisation interne de stock ──────────────────────────
-  route('POST',  '/api/internal/stock/apply',  applyExternalStockSync),
-
-  // ── Annonces d'occasion ────────────────────────────────────────
-  route('GET',   '/api/listings',              getListings),
-  route('GET',   '/api/listings/:id',          getListing),
-  route('POST',  '/api/listings',              createListing),       // soumission publique
-  route('POST',  '/api/listings/:id/image',    uploadListingImage),  // upload image annonce
-  route('GET',   '/api/admin/listings',        getAdminListings,     true),
-  route('PATCH', '/api/admin/listings/:id',    updateListingStatus,  true),
-  route('DELETE','/api/admin/listings/:id',    deleteListing,        true),
-];
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const { pathname } = url;
-
-    if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), request, env);
-
-    if ((request.method === 'GET' || request.method === 'HEAD') && pathname === '/api/health') {
-      const res = json({ ok: true, data: { service: 'boutique-americanfullfightingbons', date: new Date().toISOString() } });
-      return cors(request.method === 'HEAD' ? new Response(null, res) : res, request, env);
-    }
-
-    if ((request.method === 'GET' || request.method === 'HEAD') && pathname === '/api/version') {
-      const res = json({ ok: true, data: { service: 'boutique-americanfullfightingbons', version: '1.0.0' } });
-      return cors(request.method === 'HEAD' ? new Response(null, res) : res, request, env);
-    }
-
-    if (request.method === 'GET' && pathname === '/robots.txt') {
-      return cors(new Response('User-agent: *\nAllow: /\n\nSitemap: https://boutique.americanfullfightingbons.fr/sitemap.xml\n', {
-        headers: securityHeaders({ 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }),
-      }), request, env);
-    }
-
-    if (request.method === 'GET' && pathname === '/sitemap.xml') {
-      return cors(new Response('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://boutique.americanfullfightingbons.fr/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n</urlset>\n', {
-        headers: securityHeaders({ 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }),
-      }), request, env);
-    }
-
-    // Route spéciale : images R2 (clé avec sous-chemin ex: products/1-xxx.jpg)
-    if (request.method === 'GET' && pathname.startsWith('/images/')) {
-      try {
-        const res = await serveImage(request, env, {}, url);
-        return cors(res, request, env);
-      } catch (err) {
-        return cors(new Response('Erreur image', { status: 500 }), request, env);
-      }
-    }
-
-    const routeMethod = request.method === 'HEAD' ? 'GET' : request.method;
-    for (const r of routes) {
-      const params = matchRoute(r.pathname, pathname);
-      if (params !== null && r.method === routeMethod) {
-        try {
-          // Vérification token admin si route protégée
-          if (r.adminOnly) {
-            const authResult = await checkAdminAuth(request, env);
-            if (!authResult.ok) return cors(json({ error: 'Non autorisé' }, 401), request, env);
-          }
-          const res = await r.handler(request, env, params, url);
-          if (request.method === 'HEAD') return cors(new Response(null, res), request, env);
-          return cors(res, request, env);
-        } catch (err) {
-          console.error(err);
-          const payload = { error: 'Erreur serveur' };
-          if (env.ENVIRONMENT !== 'production') payload.detail = err?.message || String(err);
-          return cors(json(payload, 500), request, env);
-        }
-      }
-    }
-
-    return cors(json({ error: 'Route introuvable' }, 404), request, env);
-  },
-};
-
-// ── Helpers généraux ─────────────────────────────────────────────
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: securityHeaders({
-      'Content-Type': 'application/json; charset=UTF-8',
-    }),
-  });
-}
-
-function securityHeaders(base = {}) {
+function securityHeaders(extra = {}) {
   return {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
-    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.helloasso.com https://api.brevo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
-    ...base,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    ...extra,
   };
+}
+
+function secureEquals(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return diff === 0;
 }
 
 function getAllowedOrigins(env, requestUrl) {
@@ -172,1732 +47,886 @@ function getAllowedOrigins(env, requestUrl) {
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-  return new Set([
-    requestUrl.origin,
-    'https://americanfullfightingbons.fr',
-    'https://www.americanfullfightingbons.fr',
-    'https://inscription.americanfullfightingbons.fr',
-    'https://calendrier.americanfullfightingbons.fr',
-    'https://boutique.americanfullfightingbons.fr',
-    'https://gestion.americanfullfightingbons.fr',
-    ...configured,
-  ]);
+  return new Set([requestUrl.origin, ...configured]);
 }
 
-function cors(response, request, env) {
-  const r = new Response(response.body, response);
-  const requestUrl = new URL(request.url);
+function buildCorsHeaders(request, env, requestUrl) {
   const origin = String(request.headers.get('Origin') || '').trim();
   const allowedOrigins = getAllowedOrigins(env, requestUrl);
   const allowOrigin = origin && allowedOrigins.has(origin) ? origin : requestUrl.origin;
-  r.headers.set('Access-Control-Allow-Origin', allowOrigin);
-  r.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  r.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  r.headers.set('Vary', 'Origin');
-  for (const [key, value] of Object.entries(securityHeaders())) {
-    if (!r.headers.has(key)) r.headers.set(key, value);
-  }
-  return r;
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Vary': 'Origin',
+  };
 }
 
-function matchRoute(pattern, pathname) {
-  const pp = pattern.split('/');
-  const ph = pathname.split('/');
-  if (pp.length !== ph.length) return null;
-  const params = {};
-  for (let i = 0; i < pp.length; i++) {
-    if (pp[i].startsWith(':')) {
-      params[pp[i].slice(1)] = decodeURIComponent(ph[i]);
-    } else if (pp[i] !== ph[i]) return null;
-  }
-  return params;
+const ADMIN_SESSION_COOKIE = 'affbc_calendar_session';
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const CLUB_CONTACT_EMAIL = 'fullfightingbons@gmail.com';
+const MAIL_SENDER_EMAIL = 'contact@americanfullfightingbons.fr';
+
+function parseCookies(request) {
+  const raw = request.headers.get('Cookie') || '';
+  return Object.fromEntries(
+    raw.split(';')
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const index = chunk.indexOf('=');
+        if (index < 0) return [chunk, ''];
+        return [chunk.slice(0, index), decodeURIComponent(chunk.slice(index + 1))];
+      })
+  );
 }
 
-function randomToken(len = 48) {
-  const arr = new Uint8Array(len);
-  crypto.getRandomValues(arr);
-  return [...arr].map(b => b.toString(16).padStart(2, '0')).join('');
+function toBase64Url(value) {
+  return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function getAuthToken(request) {
-  const h = request.headers.get('Authorization') || '';
-  if (h.startsWith('Bearer ')) return h.slice(7);
-  return null;
+function fromBase64Url(value) {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
+  return atob(padded);
 }
 
-function getClientIp(request) {
-  return request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+function bytesToBase64Url(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function normalizeText(value, maxLen = 255) {
-  return String(value || '')
-    .replace(/[\u0000-\u001F\u007F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLen);
-}
-
-function normalizeMultilineText(value, maxLen = 2000) {
-  return String(value || '')
-    .replace(/\r/g, '')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
-    .split('\n')
-    .map(line => line.replace(/\s+/g, ' ').trim())
-    .join('\n')
-    .trim()
-    .slice(0, maxLen);
-}
-
-function normalizeEmail(value) {
-  return normalizeText(value, 320).toLowerCase();
-}
-
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function isValidImageUrl(value) {
-  if (value == null) return true;
-  if (typeof value !== 'string') return false;
-  if (value.startsWith('/images/')) return true;
-  if (value.startsWith('data:image/')) return true;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-// ── Admin Auth ───────────────────────────────────────────────────
-
-async function checkAdminAuth(request, env) {
-  const token = getAuthToken(request);
-  if (!token) return { ok: false };
-  const session = await env.DB.prepare(
-    "SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')"
-  ).bind(token).first();
-  return { ok: !!session };
-}
-
-async function ensureSupportTables(env) {
-  await env.DB.batch([
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS order_access_tokens (
-      order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
-      token TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_login_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ip TEXT NOT NULL,
-      attempted_at TEXT DEFAULT (datetime('now')),
-      success INTEGER NOT NULL DEFAULT 0
-    )`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS inventory_sync_events (
-      reference TEXT PRIMARY KEY,
-      source TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`),
-  ]);
-}
-
-async function checkInternalSyncAuth(request, env) {
-  if (!env.BOUTIQUE_SYNC_TOKEN) return { ok: false, reason: 'sync token missing' };
-  const token = request.headers.get('X-Inventory-Token') || '';
-  return { ok: await secureCompare(token, env.BOUTIQUE_SYNC_TOKEN) };
-}
-
-async function sha256Hex(value) {
-  const data = new TextEncoder().encode(String(value || ''));
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function secureCompare(a, b) {
-  const [ah, bh] = await Promise.all([sha256Hex(a), sha256Hex(b)]);
-  if (ah.length !== bh.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ah.length; i++) diff |= ah.charCodeAt(i) ^ bh.charCodeAt(i);
-  return diff === 0;
-}
-
-// ── Hachage PBKDF2 (même pattern que gestion) ────────────────────
-
-async function derivePasswordHash(password, saltBytes, iterations) {
-  const keyMaterial = await crypto.subtle.importKey(
+async function hmacSha256Base64Url(secret, value) {
+  const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['deriveBits'],
+    ['sign']
   );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations },
-    keyMaterial,
-    256,
-  );
-  return new Uint8Array(bits);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
+  return bytesToBase64Url(signature);
 }
 
-function bytesToHex(bytes) {
-  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+function getSessionSecret(env) {
+  const secret = String(env.SESSION_SECRET || '');
+  if (secret.length < 32) {
+    throw new Error('SESSION_SECRET manquant ou trop court (32 caractères minimum). Configurez-le dans les secrets Cloudflare.');
+  }
+  return secret;
 }
 
-function hexToBytes(hex) {
-  const arr = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < arr.length; i++) arr[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return arr;
+async function createSessionToken(payload, env) {
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signature = await hmacSha256Base64Url(getSessionSecret(env), encodedPayload);
+  return `${encodedPayload}.${signature}`;
 }
 
-const PBKDF2_PREFIX    = 'pbkdf2_sha256';
-const PBKDF2_ITERS     = 100_000;
+async function parseSessionToken(token, env) {
+  const [payload, signature] = String(token || '').split('.');
+  if (!payload || !signature) return null;
+  const expected = await hmacSha256Base64Url(getSessionSecret(env), payload);
+  if (!secureEquals(expected, signature)) return null;
+  try {
+    return JSON.parse(fromBase64Url(payload));
+  } catch {
+    return null;
+  }
+}
+
+function buildSessionCookie(token) {
+  return `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${Math.floor(ADMIN_SESSION_TTL_MS / 1000)}; SameSite=Lax; Secure`;
+}
+
+function clearSessionCookie() {
+  return `${ADMIN_SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax; Secure`;
+}
+
+async function loadActiveRegistrationCount(db, eventId) {
+  const result = await db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM registrations
+     WHERE event_id = ?
+       AND paiement_status IN ('en_attente', 'paye', 'gratuit')`
+  ).bind(eventId).first();
+  return Number(result?.total || 0);
+}
+
+function withComputedEventState(event, activeRegistrations) {
+  const spotsTotal = Number(event?.spots_total || 0);
+  const spotsLeft = Math.max(0, spotsTotal - activeRegistrations);
+  const forcedClosed = event?.status === 'ferme';
+  const status = forcedClosed
+    ? 'ferme'
+    : spotsLeft <= 0
+      ? 'complet'
+      : 'disponible';
+  return {
+    ...event,
+    spots_total: spotsTotal,
+    spots_left: spotsLeft,
+    status,
+    registrations_count: activeRegistrations,
+  };
+}
+
+async function hydrateEvent(db, event) {
+  const activeRegistrations = await loadActiveRegistrationCount(db, event.id);
+  return withComputedEventState(event, activeRegistrations);
+}
 
 /**
- * Hache un mot de passe en PBKDF2-SHA256 (100 000 itérations, sel aléatoire).
- * Format stocké : "pbkdf2_sha256$<iters>$<salt_hex>$<hash_hex>"
+ * Hydrate une liste d'événements en une seule requête agrégée (évite le N+1).
+ * Pour chaque eventId, compte les inscriptions actives en une passe SQL.
  */
-async function hashAdminPassword(password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await derivePasswordHash(password, salt, PBKDF2_ITERS);
-  return `${PBKDF2_PREFIX}$${PBKDF2_ITERS}$${bytesToHex(salt)}$${bytesToHex(hash)}`;
+async function hydrateEvents(db, events) {
+  if (!events || events.length === 0) return [];
+  if (events.length === 1) return [await hydrateEvent(db, events[0])];
+
+  const ids = events.map(e => e.id);
+  const placeholders = ids.map(() => '?').join(', ');
+  const rows = await db.prepare(
+    `SELECT event_id, COUNT(*) AS total
+     FROM registrations
+     WHERE event_id IN (${placeholders})
+       AND paiement_status IN ('en_attente', 'paye', 'gratuit')
+     GROUP BY event_id`
+  ).bind(...ids).all();
+
+  // Index des comptes par event_id pour O(1) lookup
+  const countByEventId = new Map();
+  for (const row of (rows?.results || [])) {
+    countByEventId.set(row.event_id, Number(row.total));
+  }
+
+  return events.map(event => withComputedEventState(event, countByEventId.get(event.id) ?? 0));
 }
 
-/**
- * Vérifie un mot de passe contre un hash PBKDF2 stocké en D1.
- * Accepte uniquement le format pbkdf2_sha256$… — aucun fallback en clair.
- */
-async function verifyAdminPassword(password, env) {
-  // Charger le hash depuis D1 (table admin_config, clé 'admin_password_hash')
-  const row = await env.DB.prepare(
-    "SELECT value FROM admin_config WHERE key = 'admin_password_hash' LIMIT 1"
-  ).first();
+async function syncEventAvailability(db, eventId) {
+  const event = await db.prepare(`SELECT * FROM events WHERE id = ?`).bind(eventId).first();
+  if (!event) return null;
+  const hydrated = await hydrateEvent(db, event);
+  await db.prepare(
+    `UPDATE events
+     SET spots_left = ?, status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+     WHERE id = ?`
+  ).bind(hydrated.spots_left, hydrated.status, eventId).run();
+  return hydrated;
+}
 
-  if (!row?.value) {
-    // Aucun hash en base → fallback d'initialisation sécurisé : accepter uniquement
-    // si ADMIN_PASSWORD_HASH_INIT est défini (variable d'environnement temporaire).
-    // En production, cette branche ne doit jamais être atteinte.
-    if (!env.ADMIN_PASSWORD_HASH_INIT) {
-      console.error('[auth] Aucun hash admin en base et ADMIN_PASSWORD_HASH_INIT absent — connexion refusée.');
-      return false;
+// ── Validation événement ───────────────────────────────────────
+function validateEvent(body) {
+  const required = ['title', 'sub', 'type', 'date_start', 'lieu'];
+  for (const f of required) {
+    if (!body[f]) throw new ApiError(`Champ requis manquant : ${f}`);
+  }
+  // Validation format date ISO YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date_start))) {
+    throw new ApiError('date_start doit être au format YYYY-MM-DD');
+  }
+  if (body.date_end !== undefined && body.date_end !== null && body.date_end !== '') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date_end))) {
+      throw new ApiError('date_end doit être au format YYYY-MM-DD');
     }
-    // ADMIN_PASSWORD_HASH_INIT doit être un hash PBKDF2 valide (généré une seule fois)
-    const stored = String(env.ADMIN_PASSWORD_HASH_INIT);
-    return verifyPbkdf2(password, stored);
-  }
-
-  return verifyPbkdf2(password, String(row.value));
-}
-
-async function verifyPbkdf2(password, stored) {
-  if (!stored.startsWith(`${PBKDF2_PREFIX}$`)) {
-    console.error('[auth] Format de hash non reconnu — connexion refusée.');
-    return false;
-  }
-  const parts = stored.split('$');
-  if (parts.length !== 4) return false;
-  const iters   = Number(parts[1]);
-  const saltHex = parts[2];
-  const hashHex = parts[3];
-  if (!iters || iters > PBKDF2_ITERS * 2 || !saltHex || !hashHex) return false;
-  const derived = await derivePasswordHash(password, hexToBytes(saltHex), iters);
-  // Comparaison en temps constant via sha256Hex (double hash évite le timing leak sur longueur)
-  const [dh, sh] = await Promise.all([sha256Hex(bytesToHex(derived)), sha256Hex(hashHex)]);
-  return secureCompare(dh, sh);
-}
-
-async function isAdminRateLimited(env, ip) {
-  await ensureSupportTables(env);
-  const row = await env.DB.prepare(
-    "SELECT COUNT(*) as count FROM admin_login_attempts WHERE ip = ? AND success = 0 AND attempted_at > datetime('now', '-15 minutes')"
-  ).bind(ip).first();
-  return Number(row?.count || 0) >= 5;
-}
-
-async function recordAdminLoginAttempt(env, ip, success) {
-  await ensureSupportTables(env);
-  await env.DB.prepare(
-    'INSERT INTO admin_login_attempts (ip, success) VALUES (?, ?)'
-  ).bind(ip, success ? 1 : 0).run();
-  if (success) {
-    await env.DB.prepare(
-      "DELETE FROM admin_login_attempts WHERE ip = ? OR attempted_at < datetime('now', '-2 days')"
-    ).bind(ip).run();
-  }
-}
-
-// POST /api/admin/login  — body: { password }
-async function adminLogin(request, env) {
-  const { password } = await request.json();
-  const ip = getClientIp(request);
-  if (await isAdminRateLimited(env, ip)) {
-    return json({ error: 'Trop de tentatives. Réessayez plus tard.' }, 429);
-  }
-  if (!password || !(await verifyAdminPassword(password, env))) {
-    await recordAdminLoginAttempt(env, ip, false);
-    return json({ error: 'Mot de passe incorrect' }, 401);
-  }
-  await recordAdminLoginAttempt(env, ip, true);
-  const token = randomToken();
-  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  await env.DB.prepare(
-    'INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)'
-  ).bind(token, expiresAt).run();
-  return json({ token, expires_at: expiresAt });
-}
-
-// POST /api/admin/logout
-async function adminLogout(request, env) {
-  const token = getAuthToken(request);
-  if (token) await env.DB.prepare('DELETE FROM admin_sessions WHERE token = ?').bind(token).run();
-  return json({ success: true });
-}
-
-// ── Serveur HTML ─────────────────────────────────────────────────
-
-async function serveHTML() {
-  return new Response(HTML, { headers: securityHeaders({ 'Content-Type': 'text/html; charset=UTF-8' }) });
-}
-
-async function serveAdminHTML() {
-  return new Response(ADMIN_HTML, { headers: securityHeaders({ 'Content-Type': 'text/html; charset=UTF-8' }) });
-}
-
-// ── Produits publics ─────────────────────────────────────────────
-
-async function getProducts(request, env, _p, url) {
-  const category = url.searchParams.get('category');
-  let query, args;
-  if (category && category !== 'tous') {
-    query = 'SELECT * FROM products WHERE category = ? AND stock > 0 ORDER BY id';
-    args  = [category];
-  } else {
-    query = 'SELECT * FROM products WHERE stock > 0 ORDER BY id';
-    args  = [];
-  }
-  const { results } = await env.DB.prepare(query).bind(...args).all();
-  const parsed = results.map(p => ({
-    ...p,
-    sizes:       p.sizes       ? JSON.parse(p.sizes)       : [],
-    size_stocks: p.size_stocks ? JSON.parse(p.size_stocks) : null,
-  }));
-  return json(parsed);
-}
-
-async function getProduct(_req, env, params) {
-  const product = await env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(params.id).first();
-  if (!product) return json({ error: 'Produit introuvable' }, 404);
-  return json({
-    ...product,
-    sizes:       product.sizes       ? JSON.parse(product.sizes)       : [],
-    size_stocks: product.size_stocks ? JSON.parse(product.size_stocks) : null,
-  });
-}
-
-// ── Produits admin ───────────────────────────────────────────────
-
-// GET /api/admin/products — tous les produits y compris stock = 0
-async function getAdminProducts(_req, env) {
-  const { results } = await env.DB.prepare(
-    'SELECT * FROM products ORDER BY id'
-  ).all();
-  return json(Array.isArray(results) ? results : []);
-}
-
-// POST /api/admin/products
-// Body: { name, category, price, price_old?, emoji, badge?, stock, description?, sizes? }
-async function createProduct(request, env) {
-  const body = await request.json();
-  const name = normalizeText(body.name, 160);
-  const category = normalizeText(body.category, 40);
-  const description = normalizeMultilineText(body.description, 1000) || null;
-  const price = Number(body.price);
-  const priceOld = body.price_old == null ? null : Number(body.price_old);
-  const stock = body.stock == null ? 0 : Number(body.stock);
-  const emoji = normalizeText(body.emoji || '📦', 8) || '📦';
-  const badge = body.badge ? normalizeText(body.badge, 40) : null;
-  const sizes = Array.isArray(body.sizes) ? body.sizes.map(size => normalizeText(size, 12)).filter(Boolean) : [];
-  const size_stocks = body.size_stocks && typeof body.size_stocks === 'object'
-    ? Object.fromEntries(Object.entries(body.size_stocks).map(([size, qty]) => [normalizeText(size, 12), Math.max(0, Number(qty) || 0)]).filter(([size]) => size))
-    : null;
-  if (!name || !category || Number.isNaN(price) || price < 0) {
-    return json({ error: 'Champs obligatoires : name, category, price' }, 400);
-  }
-  if (priceOld != null && (Number.isNaN(priceOld) || priceOld < 0)) {
-    return json({ error: 'Ancien prix invalide' }, 400);
-  }
-
-  const sizesJson      = sizes && sizes.length ? JSON.stringify(sizes) : null;
-  const sizeStocksJson = size_stocks && Object.keys(size_stocks).length ? JSON.stringify(size_stocks) : null;
-
-  // Stock = somme des tailles si size_stocks fourni, sinon stock brut
-  const computedStock = sizeStocksJson
-  ? totalStockFromSizes(sizeStocksJson)
-  : (stock ?? 0);
-
-  const result = await env.DB.prepare(
-    `INSERT INTO products (name, category, price, price_old, emoji, badge, stock, description, sizes, size_stocks)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(name, category, price, priceOld, emoji, badge, computedStock, description, sizesJson, sizeStocksJson).run();
-
-  return json({ success: true, id: result.meta.last_row_id }, 201);
-}
-
-// PATCH /api/admin/products/:id
-// Body: { name?, category?, price?, price_old?, emoji?, badge?, stock?, description?, sizes?, size_stocks? }
-async function updateProduct(request, env, params) {
-  const body = await request.json();
-  const fields = ['name', 'category', 'price', 'price_old', 'emoji', 'badge', 'stock', 'description', 'sizes', 'size_stocks'];
-  const sets = [];
-  const values = [];
-  for (const f of fields) {
-    if (f in body) {
-      if (f === 'size_stocks') {
-        const normalized = body[f] && typeof body[f] === 'object'
-          ? Object.fromEntries(Object.entries(body[f]).map(([size, qty]) => [normalizeText(size, 12), Math.max(0, Number(qty) || 0)]).filter(([size]) => size))
-          : null;
-        const ss = normalized && Object.keys(normalized).length ? JSON.stringify(normalized) : null;
-        sets.push('size_stocks = ?');
-        values.push(ss);
-        // Mettre à jour le stock global automatiquement
-        const total = totalStockFromSizes(ss);
-        if (total !== null) {
-          sets.push('stock = ?');
-          values.push(total);
-        }
-      } else if (f === 'sizes') {
-        sets.push('sizes = ?');
-        values.push(Array.isArray(body[f]) && body[f].length ? JSON.stringify(body[f].map(size => normalizeText(size, 12)).filter(Boolean)) : null);
-      } else {
-        sets.push(`${f} = ?`);
-        if (f === 'name') values.push(normalizeText(body[f], 160));
-        else if (f === 'category') values.push(normalizeText(body[f], 40));
-        else if (f === 'description') values.push(normalizeMultilineText(body[f], 1000) || null);
-        else if (f === 'badge') values.push(body[f] ? normalizeText(body[f], 40) : null);
-        else if (f === 'emoji') values.push(normalizeText(body[f], 8) || '📦');
-        else if (f === 'price' || f === 'price_old') values.push(body[f] == null ? null : Number(body[f]));
-        else if (f === 'stock') values.push(Math.max(0, Number(body[f]) || 0));
-        else values.push(body[f]);
-      }
+    if (body.date_end < body.date_start) {
+      throw new ApiError('date_end ne peut pas être antérieure à date_start');
     }
   }
-  if (!sets.length) return json({ error: 'Aucun champ à mettre à jour' }, 400);
-  sets.push("updated_at = datetime('now')");
-  values.push(params.id);
-  await env.DB.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).bind(...values).run();
-  return json({ success: true });
-}
-
-// DELETE /api/admin/products/:id
-async function deleteProduct(_req, env, params) {
-  await env.DB.prepare('DELETE FROM products WHERE id = ?').bind(params.id).run();
-  return json({ success: true });
-}
-
-// POST /api/admin/products/:id/image
-// Body: multipart/form-data avec champ "image" (fichier)
-// Stockage : R2 si binding disponible, sinon base64 en BDD (max ~500KB)
-async function uploadImage(request, env, params) {
-  const contentType = request.headers.get('Content-Type') || '';
-
-  // ── Cas 1 : multipart form-data (fichier)
-  if (contentType.includes('multipart/form-data')) {
-    const formData = await request.formData();
-    const file = formData.get('image');
-    if (!file) return json({ error: 'Champ "image" manquant' }, 400);
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      return json({ error: 'Format non supporté (jpg, png, webp, gif)' }, 400);
-    }
-
-    const ext  = file.type.split('/')[1].replace('jpeg', 'jpg');
-    const key  = `products/${params.id}-${Date.now()}.${ext}`;
-    const buffer = await file.arrayBuffer();
-
-    // Si binding R2 disponible
-    if (env.R2_BUCKET) {
-      await env.R2_BUCKET.put(key, buffer, { httpMetadata: { contentType: file.type } });
-      // URL interne servie par la route GET /images/:key
-      const imageUrl = `/images/${key}`;
-      await env.DB.prepare("UPDATE products SET image_url = ?, updated_at = datetime('now') WHERE id = ?")
-        .bind(imageUrl, params.id).run();
-      return json({ success: true, image_url: imageUrl });
-    }
-
-    // Fallback : base64 (ok pour petites images <500KB)
-    const uint8 = new Uint8Array(buffer);
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8.length; i += chunkSize) {
-      binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
-    }
-    const b64 = btoa(binary);
-    const dataUrl = `data:${file.type};base64,${b64}`;
-    await env.DB.prepare('UPDATE products SET image_url = ?, updated_at = datetime(\'now\') WHERE id = ?')
-      .bind(dataUrl, params.id).run();
-    return json({ success: true, image_url: dataUrl });
+  const validTypes = ['stage', 'competition', 'seminaire', 'grade'];
+  if (!validTypes.includes(body.type)) {
+    throw new ApiError(`Type invalide. Valeurs : ${validTypes.join(', ')}`);
   }
-
-  // ── Cas 2 : JSON avec URL externe (ou null pour supprimer)
-  const body = await request.json();
-  const image_url = body.image_url ?? null;
-  if (!isValidImageUrl(image_url)) {
-    return json({ error: 'URL image invalide' }, 400);
+  const validStatuses = ['disponible', 'complet', 'ferme'];
+  if (body.status && !validStatuses.includes(body.status)) {
+    throw new ApiError(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
   }
-  await env.DB.prepare("UPDATE products SET image_url = ?, updated_at = datetime('now') WHERE id = ?")
-    .bind(image_url, params.id).run();
-  return json({ success: true, image_url });
-}
-
-// ── Commandes ────────────────────────────────────────────────────
-
-function orderTokenExpiresAt() {
-  return new Date(Date.now() + 30 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-}
-
-async function storeOrderAccessToken(env, orderId, token) {
-  await ensureSupportTables(env);
-  await env.DB.prepare(
-    'INSERT OR REPLACE INTO order_access_tokens (order_id, token, expires_at) VALUES (?, ?, ?)'
-  ).bind(orderId, token, orderTokenExpiresAt()).run();
-}
-
-async function verifyOrderAccess(request, env, orderId) {
-  const admin = await checkAdminAuth(request, env);
-  if (admin.ok) return { ok: true, isAdmin: true };
-  await ensureSupportTables(env);
-  let token = request.headers.get('X-Order-Token') || null;
-  if (!token && request.method !== 'GET') {
-    try {
-      const body = await request.clone().json();
-      token = body.order_token || null;
-    } catch {
-      token = null;
+  // Validation prix : nombre non négatif
+  if (body.price !== undefined && body.price !== null) {
+    const price = Number(body.price);
+    if (Number.isNaN(price) || price < 0) {
+      throw new ApiError('price doit être un nombre positif ou nul');
     }
   }
-  if (!token) return { ok: false };
-  const row = await env.DB.prepare(
-    "SELECT token FROM order_access_tokens WHERE order_id = ? AND expires_at > datetime('now')"
-  ).bind(orderId).first();
-  if (!row?.token) return { ok: false };
-  return { ok: await secureCompare(token, row.token), isAdmin: false };
-}
-
-async function reserveStockForItem(env, item) {
-  const product = await env.DB.prepare('SELECT id, stock, size_stocks FROM products WHERE id = ?').bind(item.product_id).first();
-  if (!product) throw new Error(`Produit #${item.product_id} introuvable`);
-  const quantity = Math.max(1, Number(item.quantity) || 0);
-  if (item.size) {
-    const currentSizeStocks = product.size_stocks ? JSON.parse(product.size_stocks) : {};
-    const availableForSize = Number(currentSizeStocks[item.size] ?? 0);
-    if (availableForSize < quantity || Number(product.stock || 0) < quantity) {
-      throw new Error(`Stock insuffisant pour "${item.product_name}"`);
-    }
-    const nextSizeStocks = { ...currentSizeStocks, [item.size]: availableForSize - quantity };
-    const result = await env.DB.prepare(
-      "UPDATE products SET stock = stock - ?, size_stocks = ?, updated_at = datetime('now') WHERE id = ? AND stock >= ? AND size_stocks = ?"
-    ).bind(quantity, JSON.stringify(nextSizeStocks), item.product_id, quantity, product.size_stocks ?? null).run();
-    if (!result.meta?.changes) throw new Error(`Réservation concurrente détectée pour "${item.product_name}"`);
-    return;
-  }
-  const result = await env.DB.prepare(
-    "UPDATE products SET stock = stock - ?, updated_at = datetime('now') WHERE id = ? AND stock >= ?"
-  ).bind(quantity, item.product_id, quantity).run();
-  if (!result.meta?.changes) throw new Error(`Stock insuffisant pour "${item.product_name}"`);
-}
-
-async function releaseReservedStockForItems(env, items) {
-  for (const item of items) {
-    const quantity = Math.max(1, Number(item.quantity) || 0);
-    const sizeMatch = /\(([^()]+)\)\s*$/.exec(item.product_name || '');
-    const size = item.size || (sizeMatch ? sizeMatch[1] : null);
-    if (size) {
-      const current = await env.DB.prepare('SELECT size_stocks FROM products WHERE id = ?').bind(item.product_id).first();
-      const sizeStocks = current?.size_stocks ? JSON.parse(current.size_stocks) : {};
-      sizeStocks[size] = (Number(sizeStocks[size]) || 0) + quantity;
-      await env.DB.prepare(
-        "UPDATE products SET stock = stock + ?, size_stocks = ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(quantity, JSON.stringify(sizeStocks), item.product_id).run();
-    } else {
-      await env.DB.prepare(
-        "UPDATE products SET stock = stock + ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(quantity, item.product_id).run();
+  // Validation places : entier non négatif
+  if (body.spots_total !== undefined && body.spots_total !== null) {
+    const spots = Number(body.spots_total);
+    if (!Number.isInteger(spots) || spots < 0) {
+      throw new ApiError('spots_total doit être un entier positif ou nul');
     }
   }
 }
 
-async function getOrderItems(env, orderId) {
-  const { results } = await env.DB.prepare('SELECT * FROM order_items WHERE order_id = ?').bind(orderId).all();
-  return results || [];
-}
-
-async function releaseReservedStockForOrder(env, orderId) {
-  const order = await env.DB.prepare('SELECT status FROM orders WHERE id = ?').bind(orderId).first();
-  if (!order || order.status !== 'pending_payment') return { released: false };
-  const items = await getOrderItems(env, orderId);
-  await releaseReservedStockForItems(env, items);
-  await env.DB.prepare(
-    "UPDATE orders SET status = 'payment_failed' WHERE id = ? AND status = 'pending_payment'"
-  ).bind(orderId).run();
-  await ensureSupportTables(env);
-  await env.DB.prepare('DELETE FROM order_access_tokens WHERE order_id = ?').bind(orderId).run();
-  return { released: true };
-}
-
-async function applyExternalStockSync(request, env) {
-  const auth = await checkInternalSyncAuth(request, env);
-  if (!auth.ok) return json({ error: 'Non autorisé' }, 401);
-  await ensureSupportTables(env);
-
-  const body = await request.json();
-  const reference = normalizeText(body.reference, 120);
-  const source = normalizeText(body.source || 'inscription', 40) || 'inscription';
-  const items = Array.isArray(body.items) ? body.items : [];
-
-  if (!reference || !items.length) {
-    return json({ error: 'reference et items sont obligatoires' }, 400);
+// ── Validation inscription ─────────────────────────────────────
+function validateRegistration(body) {
+  const required = ['event_id', 'nom', 'prenom', 'date_naissance', 'telephone', 'email'];
+  for (const f of required) {
+    if (!body[f]) throw new ApiError(`Champ requis manquant : ${f}`);
   }
-
-  const existing = await env.DB.prepare(
-    'SELECT reference FROM inventory_sync_events WHERE reference = ? LIMIT 1'
-  ).bind(reference).first();
-  if (existing?.reference) {
-    return json({ success: true, already_applied: true, reference });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+    throw new ApiError('Email invalide');
   }
-
-  const appliedItems = [];
-  try {
-    for (const rawItem of items) {
-      const productId = Number(rawItem.product_id);
-      const quantity = Math.max(1, Number(rawItem.quantity) || 0);
-      const size = rawItem.size ? normalizeText(rawItem.size, 12) : null;
-      if (!productId || !quantity) {
-        throw new Error('Item de synchronisation invalide');
-      }
-      const product = await env.DB.prepare('SELECT name FROM products WHERE id = ?').bind(productId).first();
-      if (!product) throw new Error(`Produit introuvable pour sync: ${productId}`);
-      const item = {
-        product_id: productId,
-        quantity,
-        size,
-        product_name: size ? `${product.name} (${size})` : product.name,
-      };
-      await reserveStockForItem(env, item);
-      appliedItems.push(item);
-    }
-
-    await env.DB.prepare(
-      'INSERT INTO inventory_sync_events (reference, source) VALUES (?, ?)'
-    ).bind(reference, source).run();
-
-    return json({ success: true, reference, applied: appliedItems.length });
-  } catch (err) {
-    if (appliedItems.length) {
-      await releaseReservedStockForItems(env, appliedItems);
-    }
-    return json({ error: err.message || 'Synchronisation impossible' }, 409);
+  if (body.is_mineur && (!body.parent_nom || !body.parent_prenom || !body.parent_tel)) {
+    throw new ApiError('Informations du représentant légal requises pour un mineur');
   }
 }
 
-async function createOrder(request, env) {
-  const body = await request.json();
-  const customer_name = normalizeText(body.customer_name, 160);
-  const customer_email = normalizeEmail(body.customer_email);
-  const customer_phone = normalizeText(body.customer_phone, 40) || null;
-  const notes = normalizeMultilineText(body.notes, 1200) || null;
-  const items = Array.isArray(body.items) ? body.items : null;
-
-  if (!customer_name || !customer_email || !items?.length) {
-    return json({ error: 'Champs obligatoires manquants : customer_name, customer_email, items' }, 400);
-  }
-
-  let total = 0;
-  const enrichedItems = [];
-
-  for (const item of items) {
-    if (!item.product_id || !item.quantity || item.quantity < 1) {
-      return json({ error: `Item invalide : ${JSON.stringify(item)}` }, 400);
-    }
-    const product = await env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(item.product_id).first();
-    if (!product) return json({ error: `Produit #${item.product_id} introuvable` }, 404);
-    const sizes = product.sizes ? JSON.parse(product.sizes) : [];
-    const sizeStocks = product.size_stocks ? JSON.parse(product.size_stocks) : null;
-    const requestedSize = item.size || null;
-
-    if (sizes.length > 0) {
-      if (!requestedSize || !sizes.includes(requestedSize)) {
-        return json({ error: `Taille invalide pour "${product.name}"` }, 400);
-      }
-      const availableForSize = Number(sizeStocks?.[requestedSize] ?? 0);
-      if (availableForSize < item.quantity) {
-        return json({ error: `Stock insuffisant pour "${product.name}" en taille ${requestedSize} (stock: ${availableForSize})` }, 409);
-      }
-    } else if (requestedSize) {
-      return json({ error: `Aucune taille attendue pour "${product.name}"` }, 400);
-    }
-
-    if (product.stock < item.quantity) {
-      return json({ error: `Stock insuffisant pour "${product.name}" (stock: ${product.stock})` }, 409);
-    }
-    total += product.price * item.quantity;
-    enrichedItems.push({
-      product_id: Number(item.product_id),
-      quantity: Number(item.quantity),
-      size: requestedSize,
-      product_name: requestedSize ? `${product.name} (${requestedSize})` : product.name,
-      unit_price: product.price,
-    });
-  }
-
-  const reservedItems = [];
-  try {
-    for (const item of enrichedItems) {
-      await reserveStockForItem(env, item);
-      reservedItems.push(item);
-    }
-
-    const orderResult = await env.DB.prepare(
-      "INSERT INTO orders (customer_name, customer_email, customer_phone, total, notes, status) VALUES (?, ?, ?, ?, ?, 'pending_payment')"
-    ).bind(customer_name, customer_email, customer_phone, total, notes).run();
-
-    const orderId = orderResult.meta.last_row_id;
-
-    for (const item of enrichedItems) {
-      await env.DB.prepare(
-        'INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price) VALUES (?, ?, ?, ?, ?)'
-      ).bind(orderId, item.product_id, item.product_name, item.quantity, item.unit_price).run();
-    }
-
-    const orderToken = randomToken(24);
-    await storeOrderAccessToken(env, orderId, orderToken);
-
-    return json({ success: true, order_id: orderId, total, status: 'pending_payment', order_token: orderToken }, 201);
-  } catch (err) {
-    if (reservedItems.length) {
-      await releaseReservedStockForItems(env, reservedItems);
-    }
-    return json({ error: err.message || 'Impossible de créer la commande' }, 409);
-  }
+function isUniqueConstraintError(error, indexName) {
+  const message = String(error?.message || error || '');
+  return message.includes('UNIQUE constraint failed')
+    || (indexName && message.includes(indexName));
 }
 
-async function getOrder(request, env, params) {
-  const access = await verifyOrderAccess(request, env, params.id);
-  if (!access.ok) return json({ error: 'Accès commande refusé' }, 403);
-  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(params.id).first();
-  if (!order) return json({ error: 'Commande introuvable' }, 404);
-  const { results: items } = await env.DB.prepare('SELECT * FROM order_items WHERE order_id = ?').bind(params.id).all();
-  return json({ ...order, items });
-}
-
-async function updateOrderStatus(request, env, params) {
-  const current = await env.DB.prepare('SELECT status FROM orders WHERE id = ?').bind(params.id).first();
-  if (!current) return json({ error: 'Commande introuvable' }, 404);
-  const { status } = await request.json();
-  const allowed = ['pending_payment', 'payment_failed', 'confirmed', 'shipped', 'delivered', 'cancelled'];
-  if (!allowed.includes(status)) {
-    return json({ error: `Statut invalide. Valeurs acceptées : ${allowed.join(', ')}` }, 400);
-  }
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-
-  if (current.status === 'pending_payment' && (status === 'cancelled' || status === 'payment_failed')) {
-    await releaseReservedStockForOrder(env, params.id);
-    if (status === 'cancelled') {
-      await env.DB.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").bind(params.id).run();
-      await env.DB.prepare(
-        'INSERT INTO order_status_history (order_id, old_status, new_status, changed_at, changed_by) VALUES (?, ?, ?, ?, ?)'
-      ).bind(params.id, current.status, 'cancelled', now, 'admin').run();
-    }
-    return json({ success: true, order_id: Number(params.id), status });
-  }
-  await env.DB.prepare('UPDATE orders SET status = ? WHERE id = ?').bind(status, params.id).run();
-  await env.DB.prepare(
-    'INSERT INTO order_status_history (order_id, old_status, new_status, changed_at, changed_by) VALUES (?, ?, ?, ?, ?)'
-  ).bind(params.id, current.status, status, now, 'admin').run();
-  return json({ success: true, order_id: Number(params.id), status });
-}
-
-async function getAdminOrders(_req, env, _params, url) {
-  const status = url.searchParams.get('status');
-  let query, args;
-  if (status) {
-    query = 'SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC LIMIT 100';
-    args  = [status];
-  } else {
-    query = 'SELECT * FROM orders ORDER BY created_at DESC LIMIT 100';
-    args  = [];
-  }
-  const { results } = await env.DB.prepare(query).bind(...args).all();
-  return json(results);
-}
-
-async function getStats(_req, env) {
-  const [products, orders, revenue, lowStock, allProducts] = await Promise.all([
-    env.DB.prepare('SELECT COUNT(*) as count FROM products').first(),
-    env.DB.prepare('SELECT COUNT(*) as count FROM orders').first(),
-    env.DB.prepare("SELECT COALESCE(SUM(total),0) as total FROM orders WHERE status IN ('confirmed', 'shipped', 'delivered')").first(),
-    env.DB.prepare('SELECT * FROM products WHERE stock <= 3 ORDER BY stock').all(),
-    env.DB.prepare('SELECT id, name, category, size_stocks FROM products WHERE size_stocks IS NOT NULL').all(),
-  ]);
-  const lowSizeStock = [];
-  for (const product of allProducts.results) {
-    const sizeStocks = product.size_stocks ? JSON.parse(product.size_stocks) : null;
-    if (!sizeStocks) continue;
-    for (const [size, qty] of Object.entries(sizeStocks)) {
-      const quantity = Number(qty) || 0;
-      if (quantity <= 3) {
-        lowSizeStock.push({
-          product_id: product.id,
-          product_name: product.name,
-          category: product.category,
-          size,
-          stock: quantity,
-        });
-      }
-    }
-  }
-  return json({
-    total_products: products.count,
-    total_orders:   orders.count,
-    total_revenue:  revenue.total,
-    low_stock:      lowStock.results,
-    low_size_stock: lowSizeStock,
-  });
-}
-
-// ── HelloAsso Checkout ───────────────────────────────────────────
-// Doc : https://api.helloasso.com/swagger/index.html (v5)
-
+// ── HelloAsso OAuth2 ───────────────────────────────────────────
 async function getHelloAssoToken(env) {
-  const res = await fetch('https://api.helloasso.com/oauth2/token', {
+  const resp = await fetch('https://api.helloasso.com/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type:    'client_credentials',
       client_id:     env.HELLOASSO_CLIENT_ID,
       client_secret: env.HELLOASSO_CLIENT_SECRET,
-    }),
+    })
   });
-  if (!res.ok) throw new Error(`HelloAsso OAuth2 error: ${res.status}`);
-  const { access_token } = await res.json();
-  return access_token;
+  if (!resp.ok) throw new ApiError('Erreur authentification HelloAsso', 502);
+  const data = await resp.json();
+  return data.access_token;
 }
 
-async function getHelloAssoCheckoutIntent(env, checkoutIntentId) {
-  if (!checkoutIntentId) throw new Error('Checkout intent HelloAsso manquant');
+// ── HelloAsso — créer une session Checkout ─────────────────────
+async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom, nom, returnUrl, errorUrl }) {
   const token = await getHelloAssoToken(env);
-  const response = await fetch(
-    `https://api.helloasso.com/v5/organizations/${env.HELLOASSO_ORG_SLUG}/checkout-intents/${encodeURIComponent(String(checkoutIntentId))}`,
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-    }
-  );
-  const text = await response.text().catch(() => '');
-  let payload = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = null;
-  }
-  if (!response.ok) {
-    throw new Error(
-      payload?.message ||
-      payload?.error ||
-      `HelloAsso checkout intent error ${response.status}`
-    );
-  }
-  return payload;
-}
-
-// POST /api/checkout/:orderId
-// Crée un checkout HelloAsso et retourne l'URL de paiement
-async function createCheckout(request, env, params) {
-  const access = await verifyOrderAccess(request, env, params.orderId);
-  if (!access.ok) return json({ error: 'Accès checkout refusé' }, 403);
-  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(params.orderId).first();
-  if (!order) return json({ error: 'Commande introuvable' }, 404);
-  if (order.status === 'confirmed') {
-    return json({ error: 'Commande déjà payée' }, 409);
-  }
-  if (!['pending_payment', 'pending'].includes(order.status)) {
-    return json({ error: 'Commande non payable dans son état actuel' }, 409);
-  }
-
-  const { results: items } = await env.DB.prepare('SELECT * FROM order_items WHERE order_id = ?').bind(params.orderId).all();
-
-  // Obtenir le token HelloAsso
-  const token = await getHelloAssoToken(env);
-
-  // Construire le payload HelloAsso
-  // Les montants sont en centimes
-  const totalCents = Math.round(order.total * 100);
-  const origin = new URL(request.url).origin;
-  const callbackUrl = new URL('/api/checkout/callback', origin);
-  callbackUrl.searchParams.set('orderId', String(order.id));
-  const checkoutPayload = {
-    totalAmount:  totalCents,
-    initialAmount: totalCents,
-    itemName: `Commande AFFB #${order.id}`,
-    backUrl:   buildCheckoutReturnUrl(env.HELLOASSO_RETURN_URL || origin, order.id, 'back'),
-    errorUrl:  buildCheckoutReturnUrl(env.HELLOASSO_ERROR_URL || env.HELLOASSO_RETURN_URL || 'https://boutique.americanfullfightingbons.fr/', order.id, 'failed'),
-    returnUrl: callbackUrl.toString(),
-    containsDonation: false,
-    payer: {
-      firstName: order.customer_name.split(' ')[0] || order.customer_name,
-      lastName:  order.customer_name.split(' ').slice(1).join(' ') || '.',
-      email:     order.customer_email,
-    },
-    metadata: {
-      orderId: String(order.id),
-    },
-  };
-
-  const checkoutRes = await fetch(
+  const resp = await fetch(
     `https://api.helloasso.com/v5/organizations/${env.HELLOASSO_ORG_SLUG}/checkout-intents`,
     {
       method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        totalAmount:      amount * 100,
+        initialAmount:    amount * 100,
+        itemName:         eventTitle,
+        backUrl:          errorUrl,
+        errorUrl:         errorUrl,
+        returnUrl:        returnUrl,
+        containsDonation: false,
+        payer: { email, firstName: prenom, lastName: nom }
+      })
+    }
+  );
+ if (!resp.ok) {
+    let e = {};
+    try { e = await resp.json(); } catch(_) {}
+    const detail = e?.message || e?.error || e?.errors?.[0]?.message || JSON.stringify(e);
+    console.error('HelloAsso checkout error:', JSON.stringify(e));
+    throw new ApiError('Erreur HelloAsso : ' + detail, 502);
+  }
+  const data = await resp.json();
+  return data.redirectUrl;
+}
+
+// ── Brevo — envoi d'email ──────────────────────────────────────
+async function sendBrevoEmail(env, { to, toName, subject, html }) {
+  if (!env.BREVO_API_KEY) {
+    console.error('BREVO: clé API manquante — emails non envoyés');
+    return { ok: false, error: 'missing_api_key' };
+  }
+  console.log('BREVO: tentative envoi à', to, '| sujet:', subject);
+  try {
+    const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type':  'application/json',
+        'accept':       'application/json',
+        'api-key':      env.BREVO_API_KEY,
+        'content-type': 'application/json',
       },
-      body: JSON.stringify(checkoutPayload),
-    }
-  );
-
-  if (!checkoutRes.ok) {
-    const errText = await checkoutRes.text();
-    throw new Error(`HelloAsso checkout error ${checkoutRes.status}: ${errText}`);
-  }
-
-  const checkoutData = await checkoutRes.json();
-  const redirectUrl  = checkoutData.redirectUrl;
-  const checkoutId   = checkoutData.id;
-
-  // Sauvegarder l'ID et l'URL HelloAsso dans la commande
-  await env.DB.prepare(
-    'UPDATE orders SET helloasso_id = ?, helloasso_url = ? WHERE id = ?'
-  ).bind(String(checkoutId), redirectUrl, params.orderId).run();
-
-  return json({ success: true, checkout_url: redirectUrl, checkout_id: checkoutId });
-}
-
-// GET /api/checkout/callback?orderId=...&code=...
-// Appelé après le paiement HelloAsso (webhook ou retour navigateur)
-async function checkoutCallback(request, env, _params, url) {
-  const callbackInfo = await resolveCheckoutCallbackOrder(env, url);
-  if (!callbackInfo.orderId) {
-    return json({ error: 'Impossible de retrouver la commande depuis le callback HelloAsso' }, 400);
-  }
-
-  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(callbackInfo.orderId).first();
-  if (!order) {
-    return json({ error: 'Commande introuvable' }, 404);
-  }
-
-  const checkoutIntentId =
-    order.helloasso_id ||
-    url.searchParams.get('checkoutIntentId') ||
-    url.searchParams.get('checkoutIntent') ||
-    url.searchParams.get('id') ||
-    url.searchParams.get('helloasso_id');
-
-  if (!checkoutIntentId) {
-    await releaseReservedStockForOrder(env, callbackInfo.orderId);
-    return Response.redirect(
-      buildCheckoutReturnUrl(env.HELLOASSO_ERROR_URL || '/', callbackInfo.orderId, 'failed'),
-      302
-    );
-  }
-
-  try {
-    const intent = await getHelloAssoCheckoutIntent(env, checkoutIntentId);
-    const paymentState = buildHelloAssoPaymentState(intent, order.total);
-    if (paymentState.paid) {
-      await finalizePaidOrder(env, callbackInfo.orderId, intent);
-      return Response.redirect(
-        buildCheckoutReturnUrl(env.HELLOASSO_RETURN_URL || '/', callbackInfo.orderId, 'success'),
-        302
-      );
-    }
-  } catch (err) {
-    console.error('Checkout verification failed', err);
-    return Response.redirect(
-      buildCheckoutReturnUrl(env.HELLOASSO_ERROR_URL || env.HELLOASSO_RETURN_URL || '/', callbackInfo.orderId, 'verification_error'),
-      302
-    );
-  }
-
-  await releaseReservedStockForOrder(env, callbackInfo.orderId);
-  return Response.redirect(
-    buildCheckoutReturnUrl(env.HELLOASSO_ERROR_URL || '/', callbackInfo.orderId, 'failed'),
-    302
-  );
-}
-
-// ── Brevo — Envoi email avec facture HTML inline ─────────────────
-// Doc : https://developers.brevo.com/reference/sendtransacemail
-
-// POST /api/admin/invoice/:orderId
-async function sendInvoice(request, env, params) {
-  const result = await sendInvoiceForOrder(env, params.orderId);
-  return json({
-    success: result.sent,
-    message: result.sent
-      ? `Facture PDF envoyée à ${result.recipients.join(', ')}`
-      : 'Envoi facture non effectué',
-    recipients: result.recipients,
-  });
-}
-
-async function sendInvoiceForOrder(env, orderId) {
-  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(orderId).first();
-  if (!order) throw new Error('Commande introuvable');
-
-  const { results: items } = await env.DB.prepare('SELECT * FROM order_items WHERE order_id = ?').bind(orderId).all();
-  const recipients = [
-    order.customer_email,
-    env.BREVO_CLUB_EMAIL || CLUB_CONTACT_EMAIL,
-  ].filter(Boolean);
-
-  const invoicePdfBase64 = buildInvoicePdfBase64(order, items);
-  const emailPayload = {
-    sender: {
-      name:  env.BREVO_FROM_NAME  || 'AFFB Boutique',
-      email: env.BREVO_FROM_EMAIL || MAIL_SENDER_EMAIL,
-    },
-    to: recipients.map(email => ({
-      email,
-      name: email === order.customer_email ? order.customer_name : 'Club AFFB',
-    })),
-    subject: `Commande AFFB #${order.id} — Facture PDF`,
-    htmlContent: buildEmailHtml(order, items),
-    attachment: [
-      {
-        name:    `facture-affb-${String(order.id).padStart(6, '0')}.pdf`,
-        content: invoicePdfBase64,
-      },
-    ],
-  };
-
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'api-key':      env.BREVO_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(emailPayload),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Brevo error ${res.status}: ${err}`);
-  }
-
-  const invoiceSentAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  await env.DB.prepare(
-    'UPDATE orders SET invoice_sent = 1, invoice_sent_at = ? WHERE id = ?'
-  ).bind(invoiceSentAt, orderId).run();
-  return { attempted: true, sent: true, recipients };
-}
-
-async function finalizePaidOrder(env, orderId, helloAssoIntent) {
-  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(orderId).first();
-  if (!order) throw new Error('Commande introuvable');
-  if (order.status === 'confirmed' && order.invoice_sent) {
-    return { confirmed: true, invoice_sent: true, skipped: true };
-  }
-
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-
-  // Mettre à jour le statut + paid_at
-  await env.DB.prepare(
-    "UPDATE orders SET status = 'confirmed', paid_at = ? WHERE id = ?"
-  ).bind(now, orderId).run();
-
-  // Historique de transition
-  await env.DB.prepare(
-    'INSERT INTO order_status_history (order_id, old_status, new_status, changed_at, changed_by) VALUES (?, ?, ?, ?, ?)'
-  ).bind(orderId, order.status, 'confirmed', now, 'helloasso').run();
-
-  // Sauvegarder les données de paiement HelloAsso si disponibles
-  if (helloAssoIntent) {
-    const order2 = await env.DB.prepare('SELECT order_id FROM payments WHERE order_id = ?').bind(orderId).first();
-    if (!order2) {
-      const payment = extractHelloAssoPayment(helloAssoIntent);
-      await env.DB.prepare(
-        'INSERT INTO payments (order_id, helloasso_payment_id, amount, payer_name, payer_email, paid_at, raw_payload) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(
-        orderId,
-        payment.id || null,
-        payment.amount || null,
-        payment.payerName || null,
-        payment.payerEmail || null,
-        now,
-        JSON.stringify(helloAssoIntent)
-      ).run();
-    }
-  }
-
-  await ensureSupportTables(env);
-  await env.DB.prepare('DELETE FROM order_access_tokens WHERE order_id = ?').bind(orderId).run();
-  const invoice = await sendInvoiceForOrder(env, orderId);
-  return { confirmed: true, invoice_sent: invoice.sent };
-}
-
-// Extrait les infos de paiement du payload HelloAsso (checkout intent)
-function extractHelloAssoPayment(intent) {
-  const order = intent?.order;
-  const payer = order?.payer || intent?.payer || {};
-  const payments = order?.payments || intent?.payments || [];
-  const firstPayment = Array.isArray(payments) ? payments[0] : null;
-  return {
-    id:         firstPayment?.id || intent?.id || null,
-    amount:     firstPayment?.amount != null ? firstPayment.amount / 100 : (order?.amount != null ? order.amount / 100 : null),
-    payerName:  [payer.firstName, payer.lastName].filter(Boolean).join(' ') || null,
-    payerEmail: payer.email || order?.payer?.email || null,
-  };
-}
-
-async function resolveCheckoutCallbackOrder(env, url) {
-  const directOrderId =
-    url.searchParams.get('orderId') ||
-    url.searchParams.get('order') ||
-    decodeHelloAssoState(url.searchParams.get('state')) ||
-    decodeHelloAssoState(url.searchParams.get('metadata'));
-
-  if (directOrderId) {
-    return { orderId: directOrderId, source: 'query' };
-  }
-
-  const checkoutIntentId =
-    url.searchParams.get('checkoutIntentId') ||
-    url.searchParams.get('checkoutIntent') ||
-    url.searchParams.get('id') ||
-    url.searchParams.get('helloasso_id');
-
-  if (checkoutIntentId) {
-    const order = await env.DB.prepare(
-      'SELECT id FROM orders WHERE helloasso_id = ? LIMIT 1'
-    ).bind(String(checkoutIntentId)).first();
-    if (order?.id) {
-      return { orderId: String(order.id), source: 'helloasso_id' };
-    }
-  }
-
-  return { orderId: null, source: 'unresolved' };
-}
-
-function decodeHelloAssoState(value) {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    return parsed.orderId || parsed.order || null;
-  } catch {}
-  try {
-    const url = new URLSearchParams(String(value));
-    return url.get('orderId') || url.get('order') || null;
-  } catch {}
-  return null;
-}
-
-// ── Générateur HTML facture ───────────────────────────────────────
-function buildInvoiceHtml(order, items) {
-  const date = new Date(order.created_at).toLocaleDateString('fr-FR', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
-  const rows = items.map(i => `
-    <tr>
-      <td style="padding:10px 16px;border-bottom:1px solid #eee">${escapeHtml(i.product_name)}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #eee;text-align:center">${i.quantity}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #eee;text-align:right">${i.unit_price.toFixed(2)} €</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${(i.unit_price * i.quantity).toFixed(2)} €</td>
-    </tr>`).join('');
-
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Facture AFFB #${order.id}</title>
-</head>
-<body style="font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#111">
-  <table style="width:100%;margin-bottom:40px">
-    <tr>
-      <td>
-        <h1 style="margin:0;font-size:28px;color:#C8181A">AFFB BOUTIQUE</h1>
-        <p style="margin:4px 0;color:#666;font-size:13px">AMERICAN FULL FIGHTING BONS EN CHABLAIS<br/>
-        146 Rue du Châtelard, 74890 Bons-en-Chablais<br/>
-        ${CLUB_CONTACT_EMAIL}</p>
-      </td>
-      <td style="text-align:right">
-        <h2 style="margin:0;font-size:22px">FACTURE</h2>
-        <p style="margin:4px 0;color:#666;font-size:13px">N° ${String(order.id).padStart(6, '0')}<br/>
-        Date : ${date}<br/>
-        Statut : <strong>${statusLabel(order.status)}</strong></p>
-      </td>
-    </tr>
-  </table>
-
-  <div style="background:#f9f9f9;padding:20px;margin-bottom:30px;border-left:4px solid #C8181A">
-    <h3 style="margin:0 0 8px;font-size:14px;text-transform:uppercase;color:#C8181A">Client</h3>
-    <p style="margin:0;font-size:15px"><strong>${escapeHtml(order.customer_name)}</strong><br/>
-    ${escapeHtml(order.customer_email)}${order.customer_phone ? `<br/>${escapeHtml(order.customer_phone)}` : ''}
-    ${order.notes ? `<br/><em>Note : ${escapeHtml(order.notes)}</em>` : ''}</p>
-  </div>
-
-  <table style="width:100%;border-collapse:collapse;margin-bottom:30px">
-    <thead>
-      <tr style="background:#C8181A;color:#fff">
-        <th style="padding:12px 16px;text-align:left">Produit</th>
-        <th style="padding:12px 16px;text-align:center">Qté</th>
-        <th style="padding:12px 16px;text-align:right">Prix unit.</th>
-        <th style="padding:12px 16px;text-align:right">Total</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-    <tfoot>
-      <tr style="background:#111;color:#fff">
-        <td colspan="3" style="padding:14px 16px;text-align:right;font-weight:700;font-size:16px">TOTAL</td>
-        <td style="padding:14px 16px;text-align:right;font-weight:700;font-size:18px">${order.total.toFixed(2)} €</td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <p style="font-size:12px;color:#999;text-align:center;margin-top:40px;border-top:1px solid #eee;padding-top:20px">
-    Association loi 1901 — TVA non applicable, art. 293 B du CGI<br/>
-    Merci pour votre commande et votre soutien au club AMERICAN FULL FIGHTING BONS EN CHABLAIS !
-  </p>
-</body>
-</html>`;
-}
-
-function buildEmailHtml(order, items) {
-  const date = new Date(order.created_at).toLocaleDateString('fr-FR', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
-  const rows = items.map(i => `
-    <tr>
-      <td style="padding:10px 16px;border-bottom:1px solid #333">${escapeHtml(i.product_name)}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #333;text-align:center">${i.quantity}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #333;text-align:right">${(i.unit_price * i.quantity).toFixed(2)} €</td>
-    </tr>`).join('');
-
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head><meta charset="UTF-8"/></head>
-<body style="font-family:Arial,sans-serif;background:#0A0A0B;color:#F0EFE8;margin:0;padding:0">
-  <div style="max-width:600px;margin:0 auto">
-    <div style="background:#C8181A;padding:32px 40px;text-align:center">
-      <h1 style="margin:0;font-size:32px;font-weight:900;letter-spacing:2px;color:#fff">AFFB BOUTIQUE</h1>
-      <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px">AMERICAN FULL FIGHTING BONS EN CHABLAIS</p>
-    </div>
-    <div style="background:#111114;padding:40px">
-      <h2 style="margin:0 0 8px;color:#fff;font-size:22px">Merci pour votre commande, ${escapeHtml(order.customer_name.split(' ')[0])} !</h2>
-      <p style="color:#888;margin:0 0 24px;font-size:14px">Commande #${String(order.id).padStart(6,'0')} — ${date}</p>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-        <thead>
-          <tr style="background:#C8181A">
-            <th style="padding:10px 16px;text-align:left;color:#fff;font-size:13px">Produit</th>
-            <th style="padding:10px 16px;text-align:center;color:#fff;font-size:13px">Qté</th>
-            <th style="padding:10px 16px;text-align:right;color:#fff;font-size:13px">Total</th>
-          </tr>
-        </thead>
-        <tbody style="color:#ddd">${rows}</tbody>
-        <tfoot>
-          <tr>
-            <td colspan="2" style="padding:14px 16px;text-align:right;font-weight:700;color:#fff">TOTAL</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:700;font-size:20px;color:#C8181A">${order.total.toFixed(2)} €</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <p style="color:#888;font-size:14px;line-height:1.7">
-        Votre commande est <strong style="color:#fff">${statusLabel(order.status)}</strong>.<br/>
-        La facture PDF est jointe à cet email et transmise aussi au club.<br/><br/>
-        Pour toute question : <a href="mailto:${CLUB_CONTACT_EMAIL}" style="color:#C8181A">${CLUB_CONTACT_EMAIL}</a>
-      </p>
-    </div>
-    <div style="background:#0A0A0B;padding:20px 40px;text-align:center;border-top:1px solid #1A1A1F">
-      <p style="color:#555;font-size:12px;margin:0">© ${new Date().getFullYear()} AMERICAN FULL FIGHTING BONS EN CHABLAIS<br/>
-      146 Rue du Châtelard, 74890 Bons-en-Chablais</p>
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-// GET /images/:key — sert une image depuis R2
-// La clé peut contenir un slash (ex: products/1-123456.jpg)
-// On bypass le router pour cette route dans le fetch handler
-async function serveImage(request, env, _params, url) {
-  if (!env.R2_BUCKET) return new Response('R2 non configuré', { status: 503 });
-  // Extraire la clé complète depuis le pathname (tout après /images/)
-  const key = url.pathname.replace(/^\/images\//, '');
-  if (!key) return new Response('Clé manquante', { status: 400 });
-  const object = await env.R2_BUCKET.get(key);
-  if (!object) return new Response('Image introuvable', { status: 404 });
-  const headers = new Headers();
-  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-  return new Response(object.body, { headers });
-}
-
-function statusLabel(status) {
-  const map = {
-    pending: 'En attente',
-    pending_payment: 'Paiement en attente',
-    payment_failed: 'Paiement échoué',
-    confirmed: 'Confirmée',
-    shipped:   'Expédiée',
-    delivered: 'Livrée',
-    cancelled: 'Annulée',
-  };
-  return map[status] || status;
-}
-
-// Calcule le stock total à partir d'un objet size_stocks JSON
-// Si size_stocks est null/vide, retourne le stock brut
-function totalStockFromSizes(sizeStocksJson) {
-  if (!sizeStocksJson) return null;
-  try {
-    const obj = typeof sizeStocksJson === 'string' ? JSON.parse(sizeStocksJson) : sizeStocksJson;
-    return Object.values(obj).reduce((sum, v) => sum + (Number(v) || 0), 0);
-  } catch {
-    return null;
-  }
-}
-
-function normalizePdfText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\x20-\x7E]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function pdfEscape(text) {
-  return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-}
-
-function buildSimplePdfBase64(lines) {
-  const pageWidth = 595;
-  const pageHeight = 842;
-  const marginLeft = 48;
-  const marginTop = 64;
-  const lineHeight = 16;
-  const maxLinesPerPage = 44;
-  const pages = [];
-  for (let i = 0; i < lines.length; i += maxLinesPerPage) {
-    pages.push(lines.slice(i, i + maxLinesPerPage));
-  }
-
-  const objects = [];
-  let objectId = 1;
-
-  const catalogId = objectId++;
-  const pagesId = objectId++;
-  const fontId = objectId++;
-  const pageObjectIds = [];
-  const contentObjectIds = [];
-
-  for (let i = 0; i < pages.length; i++) {
-    pageObjectIds.push(objectId++);
-    contentObjectIds.push(objectId++);
-  }
-
-  objects[catalogId] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
-  objects[fontId] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`;
-
-  pages.forEach((pageLines, index) => {
-    const content = [
-      'BT',
-      '/F1 12 Tf',
-      `${marginLeft} ${pageHeight - marginTop} Td`,
-      ...pageLines.map((line, lineIndex) => {
-        const escaped = pdfEscape(line);
-        return lineIndex === 0
-          ? `(${escaped}) Tj`
-          : `0 -${lineHeight} Td (${escaped}) Tj`;
+      body: JSON.stringify({
+        sender:  { name: 'AMERICAN FULL FIGHTING BONS EN CHABLAIS', email: MAIL_SENDER_EMAIL },
+        to:      [{ email: to, name: toName }],
+        subject,
+        htmlContent: html,
       }),
-      'ET',
-    ].join('\n');
-
-    objects[contentObjectIds[index]] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
-    objects[pageObjectIds[index]] =
-      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentObjectIds[index]} 0 R >>`;
-  });
-
-  objects[pagesId] = `<< /Type /Pages /Count ${pageObjectIds.length} /Kids [${pageObjectIds.map(id => `${id} 0 R`).join(' ')}] >>`;
-
-  const entries = [];
-  let pdf = '%PDF-1.4\n';
-  for (let id = 1; id < objects.length; id++) {
-    entries[id] = pdf.length;
-    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
-  }
-
-  const xrefStart = pdf.length;
-  pdf += `xref\n0 ${objects.length}\n`;
-  pdf += '0000000000 65535 f \n';
-  for (let id = 1; id < objects.length; id++) {
-    pdf += `${String(entries[id]).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${objects.length} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return btoa(pdf);
-}
-
-function buildInvoicePdfBase64(order, items) {
-  const date = new Date(order.created_at).toLocaleDateString('fr-FR', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  });
-
-  const customerName = normalizePdfText(order.customer_name);
-  const customerEmail = normalizePdfText(order.customer_email);
-  const customerPhone = normalizePdfText(order.customer_phone || '');
-  const orderNote = normalizePdfText(order.notes || '');
-  const status = normalizePdfText(statusLabel(order.status));
-  const totalText = `${Number(order.total).toFixed(2)} EUR`;
-  const clubEmail = normalizePdfText(envSafeValue(CLUB_CONTACT_EMAIL));
-  const boutiqueEmail = normalizePdfText(envSafeValue(CLUB_CONTACT_EMAIL));
-  const clubSite = normalizePdfText(envSafeValue('www.americanfullfightingbons.fr'));
-
-  let y = 790;
-  const left = 46;
-  const right = 549;
-  const content = [];
-
-  const push = (line) => content.push(line);
-  const text = (x, yPos, value, font = 'F1', size = 12) => {
-    push('BT');
-    push(`/${font} ${size} Tf`);
-    push(`${x} ${yPos} Td`);
-    push(`(${pdfEscape(normalizePdfText(value))}) Tj`);
-    push('ET');
-  };
-  const rect = (x, yPos, w, h, fillRgb = null, strokeRgb = null, lineWidth = 1) => {
-    if (fillRgb) push(`${fillRgb.join(' ')} rg`);
-    if (strokeRgb) {
-      push(`${strokeRgb.join(' ')} RG`);
-      push(`${lineWidth} w`);
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      console.error('BREVO: erreur HTTP', resp.status, JSON.stringify(body));
+      return { ok: false, status: resp.status, body };
+    } else {
+      console.log('BREVO: succès', resp.status, JSON.stringify(body));
+      return { ok: true, status: resp.status, body };
     }
-    push(`${x} ${yPos} ${w} ${h} re`);
-    push(fillRgb && strokeRgb ? 'B' : fillRgb ? 'f' : 'S');
-  };
-  const hr = (yPos, x1 = left, x2 = right, rgb = [0.82, 0.82, 0.82]) => {
-    push(`${rgb.join(' ')} RG`);
-    push('1 w');
-    push(`${x1} ${yPos} m`);
-    push(`${x2} ${yPos} l`);
-    push('S');
-  };
-  const image = (name, x, yPos, w, h) => {
-    push('q');
-    push(`${w} 0 0 ${h} ${x} ${yPos} cm`);
-    push(`/${name} Do`);
-    push('Q');
-  };
-
-  push('0.78 0.09 0.10 rg');
-  push(`${left} 748 ${right - left} 66 re`);
-  push('f');
-  image('Im1', left + 12, 756, 44, 48);
-  text(left + 64, 792, 'BOUTIQUE DU CLUB', 'F2', 24);
-  text(left + 64, 776, 'AMERICAN FULL FIGHTING BONS EN CHABLAIS', 'F1', 10);
-  text(left + 64, 762, 'Boutique officielle du club', 'F1', 10);
-
-  text(386, 792, 'FACTURE', 'F2', 22);
-  text(386, 776, `N° ${String(order.id).padStart(6, '0')}`, 'F1', 11);
-  text(386, 762, `Date : ${date}`, 'F1', 10);
-
-  rect(left, 676, 242, 62, [0.97, 0.97, 0.97], [0.88, 0.88, 0.88], 1);
-  text(left + 14, 722, 'CLIENT', 'F2', 12);
-  text(left + 14, 704, customerName, 'F1', 11);
-  text(left + 14, 688, customerEmail, 'F1', 10);
-  if (customerPhone) text(left + 14, 674, customerPhone, 'F1', 10);
-
-  rect(308, 676, 241, 62, [0.97, 0.97, 0.97], [0.88, 0.88, 0.88], 1);
-  text(322, 722, 'DETAILS DE COMMANDE', 'F2', 12);
-  text(322, 704, `Statut : ${status}`, 'F1', 11);
-  text(322, 688, `Total : ${totalText}`, 'F1', 10);
-  if (orderNote) {
-    text(322, 674, `Note : ${orderNote.slice(0, 34)}`, 'F1', 9);
+  } catch(e) {
+    console.error('BREVO: exception réseau', e.message);
+    return { ok: false, error: e.message };
   }
-
-  rect(left, 620, right - left, 26, [0.78, 0.09, 0.10], null, 0);
-  text(left + 12, 628, 'Produit', 'F2', 11);
-  text(360, 628, 'Qte', 'F2', 11);
-  text(418, 628, 'Prix unit.', 'F2', 11);
-  text(486, 628, 'Total', 'F2', 11);
-
-  y = 610;
-  items.forEach((item, index) => {
-    const lineTotal = `${(item.unit_price * item.quantity).toFixed(2)} EUR`;
-    const unitPrice = `${Number(item.unit_price).toFixed(2)} EUR`;
-    const label = normalizePdfText(item.product_name).slice(0, 52);
-    if (index % 2 === 0) rect(left, y - 14, right - left, 20, [0.985, 0.985, 0.985], null, 0);
-    text(left + 12, y, label, 'F1', 10);
-    text(364, y, String(item.quantity), 'F1', 10);
-    text(418, y, unitPrice, 'F1', 10);
-    text(486, y, lineTotal, 'F1', 10);
-    y -= 20;
-  });
-
-  hr(y - 4);
-  rect(372, y - 34, 177, 28, [0.07, 0.07, 0.08], null, 0);
-  text(386, y - 17, 'TOTAL', 'F2', 12);
-  text(472, y - 17, totalText, 'F2', 12);
-
-  rect(left, 124, 242, 54, [0.97, 0.97, 0.97], [0.88, 0.88, 0.88], 1);
-  text(left + 12, 162, 'COORDONNEES CLUB', 'F2', 11);
-  text(left + 12, 146, 'AMERICAN FULL FIGHTING BONS EN CHABLAIS', 'F1', 9);
-  text(left + 12, 132, '146 Rue du Chatelard, 74890 Bons-en-Chablais', 'F1', 9);
-
-  rect(308, 124, 241, 54, [0.97, 0.97, 0.97], [0.88, 0.88, 0.88], 1);
-  text(320, 162, 'CONTACT', 'F2', 11);
-  text(320, 146, `Email : ${boutiqueEmail}`, 'F1', 9);
-  text(320, 132, `Club : ${clubEmail} | ${clubSite}`, 'F1', 9);
-
-  text(left, 96, 'Association loi 1901 - TVA non applicable, art. 293 B du CGI', 'F1', 9);
-  text(left, 80, 'Facture generee automatiquement lors de la validation de la commande.', 'F1', 9);
-  text(left, 64, 'Copie envoyee au client et au club via Brevo.', 'F1', 9);
-
-  const pdf = buildRichPdfBase64(content);
-  return pdf;
 }
 
-function buildRichPdfBase64(contentLines) {
-  const pageWidth = 595;
-  const pageHeight = 842;
-  const objects = [];
-  let objectId = 1;
-  const catalogId = objectId++;
-  const pagesId = objectId++;
-  const fontRegularId = objectId++;
-  const fontBoldId = objectId++;
-  const imageId = objectId++;
-  const pageId = objectId++;
-  const contentId = objectId++;
-  const logoBinary = atob(PDF_LOGO_JPEG_BASE64);
+async function sendConfirmationEmails(env, { reg, ev }) {
+  const CLUB_EMAIL = CLUB_CONTACT_EMAIL;
+  const CLUB_NAME  = 'AMERICAN FULL FIGHTING BONS EN CHABLAIS';
+  const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
+  const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const isConfirmed = reg.paiement_status === 'gratuit' || reg.paiement_status === 'paye';
+  const participantTitle = isConfirmed ? '✅ Inscription confirmée' : '⏳ Inscription enregistrée';
+  const participantIntro = isConfirmed
+    ? 'Votre inscription à l\'événement suivant a bien été confirmée :'
+    : 'Votre demande d\'inscription a bien été enregistrée. Le paiement ou le dossier doit encore être vérifié pour finaliser votre participation :';
+  const participantStatus = reg.paiement_status === 'gratuit'
+    ? '✓ Gratuit'
+    : reg.paiement_status === 'paye'
+      ? '✓ Payé'
+      : '⏳ En attente de validation';
+  const participantSubject = isConfirmed
+    ? `✅ Inscription confirmée — ${ev.title}`
+    : `⏳ Inscription enregistrée — ${ev.title}`;
 
-  objects[catalogId] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
-  objects[pagesId] = `<< /Type /Pages /Count 1 /Kids [${pageId} 0 R] >>`;
-  objects[fontRegularId] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`;
-  objects[fontBoldId] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>`;
-  objects[imageId] = `<< /Type /XObject /Subtype /Image /Width 165 /Height 180 /ColorSpace /DeviceCMYK /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBinary.length} >>\nstream\n${logoBinary}\nendstream`;
-  objects[pageId] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> /XObject << /Im1 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`;
+  const participantHtml = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+  <div style="background:#050505;padding:20px 24px;border-radius:8px 8px 0 0;text-align:center">
+    <span style="font-family:sans-serif;font-size:22px;font-weight:900;letter-spacing:2px;color:#fff">AMERICAN FULL FIGHTING</span><br>
+    <span style="color:#aaa;font-size:13px">Bons-en-Chablais · FFK</span>
+  </div>
+  <div style="border:1px solid #eee;border-top:none;padding:28px 24px;border-radius:0 0 8px 8px">
+    <h2 style="color:#E10600;margin-top:0">${participantTitle}</h2>
+    <p>Bonjour <strong>${reg.prenom} ${reg.nom}</strong>,</p>
+    <p>${participantIntro}</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Événement</td><td style="padding:8px 12px">${ev.title}</td></tr>
+      <tr><td style="padding:8px 12px;font-weight:600">Date</td><td style="padding:8px 12px">${dateStr}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Lieu</td><td style="padding:8px 12px">${ev.lieu}</td></tr>
+      <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700;color:#E10600">${prix}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut dossier</td><td style="padding:8px 12px">${participantStatus}</td></tr>
+    </table>
+    <p style="color:#666;font-size:13px">Pour toute question, contactez-nous à <a href="mailto:${CLUB_EMAIL}">${CLUB_EMAIL}</a>.</p>
+    <p style="color:#666;font-size:13px">À bientôt sur le tatami 🥊</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+    <p style="color:#aaa;font-size:11px;text-align:center">${CLUB_NAME} · Saison 2025–2026</p>
+  </div>
+</body></html>`;
 
-  const stream = contentLines.join('\n');
-  objects[contentId] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  const clubHtml = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#E10600">🥊 Nouvelle inscription — ${ev.title}</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Participant</td><td style="padding:8px 12px">${reg.prenom} ${reg.nom}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Email</td><td style="padding:8px 12px"><a href="mailto:${reg.email}">${reg.email}</a></td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Téléphone</td><td style="padding:8px 12px">${reg.telephone}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Date de naissance</td><td style="padding:8px 12px">${reg.date_naissance}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Catégorie</td><td style="padding:8px 12px">${reg.categorie || '—'}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700">${prix}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut paiement</td><td style="padding:8px 12px">${reg.paiement_status}</td></tr>
+    ${reg.message ? `<tr><td style="padding:8px 12px;font-weight:600">Message</td><td style="padding:8px 12px">${reg.message}</td></tr>` : ''}
+    ${reg.is_mineur ? `<tr style="background:#fff3cd"><td style="padding:8px 12px;font-weight:600">⚠ Mineur</td><td style="padding:8px 12px">${reg.parent_prenom} ${reg.parent_nom} — ${reg.parent_tel}</td></tr>` : ''}
+  </table>
+</body></html>`;
 
-  const entries = [];
-  let pdf = '%PDF-1.4\n';
-  for (let id = 1; id < objects.length; id++) {
-    entries[id] = pdf.length;
-    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
-  }
+  const [participantEmail, clubEmail] = await Promise.all([
+    sendBrevoEmail(env, {
+      to: reg.email, toName: `${reg.prenom} ${reg.nom}`,
+      subject: participantSubject,
+      html: participantHtml,
+    }),
+    sendBrevoEmail(env, {
+      to: CLUB_EMAIL, toName: CLUB_NAME,
+      subject: `🥊 Nouvelle inscription — ${ev.title} — ${reg.nom} ${reg.prenom}`,
+      html: clubHtml,
+    }),
+  ]);
 
-  const xrefStart = pdf.length;
-  pdf += `xref\n0 ${objects.length}\n`;
-  pdf += '0000000000 65535 f \n';
-  for (let id = 1; id < objects.length; id++) {
-    pdf += `${String(entries[id]).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${objects.length} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return btoa(pdf);
+  return { participant: participantEmail, club: clubEmail };
 }
 
-function envSafeValue(fallback) {
-  return fallback;
+// ── Rate limiting simple par IP (en mémoire, par isolat Worker) ──
+const rateLimitMap = new Map();
+function isRateLimited(ip, limit = 10, windowMs = 60_000) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+  entry.count++;
+  rateLimitMap.set(ip, entry);
+  // Nettoyage périodique pour éviter les fuites mémoire
+  if (rateLimitMap.size > 5000) {
+    for (const [k, v] of rateLimitMap) {
+      if (now > v.resetAt) rateLimitMap.delete(k);
+    }
+  }
+  return entry.count > limit;
 }
 
-// ── Annonces d'occasion ─────────────────────────────────────────
+// ── Exports pour les tests unitaires (fonctions pures uniquement) ──
+export {
+  ApiError,
+  secureEquals,
+  getAllowedOrigins,
+  parseCookies,
+  toBase64Url,
+  fromBase64Url,
+  withComputedEventState,
+  validateEvent,
+  validateRegistration,
+  isUniqueConstraintError,
+  isRateLimited,
+};
 
-const LISTING_CONDITIONS = ['neuf', 'tres_bon', 'bon', 'correct'];
-const LISTING_CATEGORIES = ['gants', 'protections', 'tenues', 'accessoires', 'divers'];
-const LISTING_STATUSES   = ['pending', 'active', 'sold', 'rejected'];
 
-// GET /api/listings — annonces actives uniquement
-async function getListings(request, env, _p, url) {
-  const category = url.searchParams.get('category');
-  let query, args;
-  if (category && category !== 'tous') {
-    query = "SELECT id, title, description, price, category, condition, contact_name, image_url, created_at FROM listings WHERE status = 'active' AND category = ? ORDER BY created_at DESC";
-    args  = [category];
-  } else {
-    query = "SELECT id, title, description, price, category, condition, contact_name, image_url, created_at FROM listings WHERE status = 'active' ORDER BY created_at DESC";
-    args  = [];
-  }
-  const { results } = await env.DB.prepare(query).bind(...args).all();
-  return json(results);
+// ── Suppression automatique des événements expirés (cron J+5) ──
+async function purgeExpiredEvents(env) {
+  // Supprime les événements dont la date de fin (ou de début si pas de date_end)
+  // est dépassée depuis plus de 5 jours.
+  // Les inscriptions liées sont supprimées automatiquement via ON DELETE CASCADE.
+  const result = await env.DB.prepare(`
+    DELETE FROM events
+    WHERE (
+      CASE
+        WHEN date_end IS NOT NULL AND date_end != ''
+          THEN date_end
+        ELSE date_start
+      END
+    ) < date('now', '-5 days')
+  `).run();
+  console.log(`[cron] purgeExpiredEvents: ${result.changes ?? 0} événement(s) supprimé(s)`);
 }
 
-// GET /api/listings/:id — détail annonce (publique, sans email ni téléphone si pending/rejected)
-async function getListing(_req, env, params) {
-  const listing = await env.DB.prepare('SELECT * FROM listings WHERE id = ?').bind(params.id).first();
-  if (!listing) return json({ error: 'Annonce introuvable' }, 404);
-  if (listing.status !== 'active') return json({ error: 'Annonce non disponible' }, 404);
-  // Ne pas exposer contact_email et contact_phone dans la réponse publique détaillée
-  const { contact_email: _e, contact_phone: _p, ...safe } = listing;
-  return json(safe);
-}
+export default {
+  // ── Cron trigger — exécuté selon wrangler.toml [triggers] crons ──
+  async scheduled(_event, env, _ctx) {
+    await purgeExpiredEvents(env);
+  },
 
-// POST /api/listings — soumission publique d'une annonce (en attente de validation)
-async function createListing(request, env) {
-  const body = await request.json();
-  const title        = normalizeText(body.title, 160);
-  const description  = normalizeMultilineText(body.description, 1000) || null;
-  const price        = Number(body.price);
-  const category     = normalizeText(body.category, 40);
-  const condition    = normalizeText(body.condition, 20);
-  const contact_name = normalizeText(body.contact_name, 100);
-  const contact_email= normalizeEmail(body.contact_email);
-  const contact_phone= body.contact_phone ? normalizeText(body.contact_phone, 20) : null;
+  async fetch(request, env) {
+    const url    = new URL(request.url);
+    const path   = url.pathname;
+    const method = request.method.toUpperCase();
 
-  if (!title)          return json({ error: 'Titre obligatoire'         }, 400);
-  if (Number.isNaN(price) || price <= 0) return json({ error: 'Prix invalide (> 0)'      }, 400);
-  if (!LISTING_CATEGORIES.includes(category)) return json({ error: 'Catégorie invalide'      }, 400);
-  if (!LISTING_CONDITIONS.includes(condition)) return json({ error: 'État invalide'           }, 400);
-  if (!contact_name)   return json({ error: 'Nom du vendeur obligatoire'}, 400);
-  if (!contact_email)  return json({ error: 'Email invalide'            }, 400);
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/health') {
+      return new Response(JSON.stringify({ ok: true, data: { service: 'calendrier-americanfullfightingbons', date: new Date().toISOString() } }), {
+        headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+      });
+    }
 
-  const result = await env.DB.prepare(
-    `INSERT INTO listings (title, description, price, category, condition, contact_name, contact_email, contact_phone, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
-  ).bind(title, description, price, category, condition, contact_name, contact_email, contact_phone).run();
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/version') {
+      return new Response(JSON.stringify({ ok: true, data: { service: 'calendrier-americanfullfightingbons', version: '1.0.0' } }), {
+        headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+      });
+    }
 
-  return json({ success: true, id: result.meta.last_row_id, status: 'pending' }, 201);
-}
+    if ((method === 'GET' || method === 'HEAD') && path === '/robots.txt') {
+      return new Response('User-agent: *\nAllow: /\n\nSitemap: https://calendrier.americanfullfightingbons.fr/sitemap.xml\n', {
+        headers: securityHeaders({ 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }),
+      });
+    }
 
-// POST /api/listings/:id/image — upload image d'annonce (public, avant validation admin)
-async function uploadListingImage(request, env, params) {
-  const listing = await env.DB.prepare('SELECT id, status FROM listings WHERE id = ?').bind(params.id).first();
-  if (!listing) return json({ error: 'Annonce introuvable' }, 404);
+    if ((method === 'GET' || method === 'HEAD') && path === '/sitemap.xml') {
+      return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://calendrier.americanfullfightingbons.fr/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n</urlset>\n', {
+        headers: securityHeaders({ 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }),
+      });
+    }
 
-  const contentType = request.headers.get('Content-Type') || '';
-  if (!contentType.includes('multipart/form-data')) {
-    return json({ error: 'Envoi multipart/form-data requis' }, 400);
-  }
+    // ── Logo servi directement par le Worker ──────────────────
+    // Remplace l'ancien hot-link vers raw.githubusercontent.com/.../Logo.jpg (2,6 Mo,
+    // dépendance non garantie en prod) par une version compressée (~24 Ko, WebP),
+    // servie depuis le même domaine que le site avec un cache long (le contenu est figé).
+    if ((method === 'GET' || method === 'HEAD') && path === '/logo.webp') {
+      const bytes = Uint8Array.from(atob(LOGO_WEBP_BASE64), (c) => c.charCodeAt(0));
+      return new Response(bytes, {
+        headers: securityHeaders({
+          'Content-Type': 'image/webp',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        }),
+      });
+    }
 
-  const formData = await request.formData();
-  const file = formData.get('image');
-  if (!file) return json({ error: 'Champ "image" manquant' }, 400);
+    // ── Servir index.html embarqué dans le Worker ─────────────
+    if ((method === 'GET' || method === 'HEAD') && (path === '/' || path === '' || path === '/index.html')) {
+      return new Response(INDEX_HTML, {
+        status: 200,
+        headers: securityHeaders({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'public, max-age=300',
+        }),
+      });
+    }
 
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!allowedTypes.includes(file.type)) {
-    return json({ error: 'Format non supporté (jpg, png, webp)' }, 400);
-  }
+    // ── CORS ───────────────────────────────────────────────────
+    const corsHeaders = buildCorsHeaders(request, env, url);
+    if (method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: securityHeaders(corsHeaders) });
+    }
 
-  const buffer = await file.arrayBuffer();
-  if (buffer.byteLength > 5 * 1024 * 1024) {
-    return json({ error: 'Image trop lourde (max 5 Mo)' }, 400);
-  }
+    // ── Helpers internes ───────────────────────────────────────
+    const json = (data, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: securityHeaders({ ...corsHeaders, 'Content-Type': 'application/json' }),
+      });
 
-  const ext    = file.type.split('/')[1].replace('jpeg', 'jpg');
-  const key    = `listings/${params.id}-${Date.now()}.${ext}`;
+    const err = (msg, status = 400) => json({ error: msg }, status);
 
-  if (env.R2_BUCKET) {
-    await env.R2_BUCKET.put(key, buffer, { httpMetadata: { contentType: file.type } });
-    const imageUrl = `/images/${key}`;
-    await env.DB.prepare("UPDATE listings SET image_url = ?, updated_at = datetime('now') WHERE id = ?")
-      .bind(imageUrl, params.id).run();
-    return json({ success: true, image_url: imageUrl });
-  }
+    const hasAdminSession = async () => {
+      const token = parseCookies(request)[ADMIN_SESSION_COOKIE];
+      if (!token) return false;
+      const session = await parseSessionToken(token, env);
+      return !!session && Number(session.expiresAt || 0) > Date.now() && session.role === 'admin';
+    };
 
-  // Fallback base64
-  const uint8 = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < uint8.length; i += chunkSize) {
-    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
-  }
-  const dataUrl = `data:${file.type};base64,${btoa(binary)}`;
-  await env.DB.prepare("UPDATE listings SET image_url = ?, updated_at = datetime('now') WHERE id = ?")
-    .bind(dataUrl, params.id).run();
-  return json({ success: true, image_url: dataUrl });
-}
+    const isAdmin = async () => {
+      // Seule la session cookie HMAC est acceptée — le Bearer token statique a été supprimé
+      // car il ne peut pas expirer et constitue un accès permanent si le token fuite.
+      return hasAdminSession();
+    };
 
-// GET /api/admin/listings — toutes les annonces (admin)
-async function getAdminListings(request, env, _p, url) {
-  const status = url.searchParams.get('status');
-  let query, args;
-  if (status && LISTING_STATUSES.includes(status)) {
-    query = 'SELECT * FROM listings WHERE status = ? ORDER BY created_at DESC';
-    args  = [status];
-  } else {
-    query = 'SELECT * FROM listings ORDER BY created_at DESC';
-    args  = [];
-  }
-  const { results } = await env.DB.prepare(query).bind(...args).all();
-  return json(results);
-}
+    const requireAdmin = async () => {
+      if (!(await isAdmin())) throw new ApiError('Non autorisé', 401);
+    };
 
-// PATCH /api/admin/listings/:id — changer statut ou modifier une annonce (admin)
-async function updateListingStatus(request, env, params) {
-  const body = await request.json();
-  const sets   = [];
-  const values = [];
+    const genId = (prefix = 'evt') => `${prefix}${Date.now().toString(36)}`;
 
-  if (body.status !== undefined) {
-    if (!LISTING_STATUSES.includes(body.status)) return json({ error: 'Statut invalide' }, 400);
-    sets.push('status = ?');
-    values.push(body.status);
-  }
-  if (body.title !== undefined) {
-    sets.push('title = ?'); values.push(normalizeText(body.title, 160));
-  }
-  if (body.description !== undefined) {
-    sets.push('description = ?'); values.push(normalizeMultilineText(body.description, 1000) || null);
-  }
-  if (body.price !== undefined) {
-    const p = Number(body.price);
-    if (Number.isNaN(p) || p < 0) return json({ error: 'Prix invalide' }, 400);
-    sets.push('price = ?'); values.push(p);
-  }
+    const segments = path.replace(/^\/api\//, '').split('/');
+    const resource = segments[0];
+    const resId    = segments[1];
+    const subRes   = segments[2];
 
-  if (!sets.length) return json({ error: 'Aucun champ à modifier' }, 400);
+    try {
+      if (resource === 'auth') {
+        if (method === 'POST' && resId === 'login') {
+          const body = await request.json();
+          const password = String(body?.password || '').trim();
+          if (!password || !secureEquals(password, env.ADMIN_TOKEN || '')) {
+            return err('Mot de passe incorrect', 401);
+          }
+          const token = await createSessionToken(
+            { role: 'admin', expiresAt: Date.now() + ADMIN_SESSION_TTL_MS },
+            env
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: securityHeaders({
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'Set-Cookie': buildSessionCookie(token),
+            }),
+          });
+        }
 
-  sets.push("updated_at = datetime('now')");
-  values.push(params.id);
-  await env.DB.prepare(`UPDATE listings SET ${sets.join(', ')} WHERE id = ?`).bind(...values).run();
-  return json({ success: true });
-}
+        if (method === 'GET' && resId === 'session') {
+          return json({ ok: await isAdmin() });
+        }
 
-// DELETE /api/admin/listings/:id — supprimer une annonce (admin)
-async function deleteListing(_req, env, params) {
-  const listing = await env.DB.prepare('SELECT id, image_url FROM listings WHERE id = ?').bind(params.id).first();
-  if (!listing) return json({ error: 'Annonce introuvable' }, 404);
-  // Supprimer image R2 si existante
-  if (env.R2_BUCKET && listing.image_url && listing.image_url.startsWith('/images/')) {
-    const key = listing.image_url.replace('/images/', '');
-    try { await env.R2_BUCKET.delete(key); } catch (_) { /* non bloquant */ }
-  }
-  await env.DB.prepare('DELETE FROM listings WHERE id = ?').bind(params.id).run();
-  return json({ success: true });
-}
+        if (method === 'POST' && resId === 'logout') {
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: securityHeaders({
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'Set-Cookie': clearSessionCookie(),
+            }),
+          });
+        }
+      }
 
-function buildCheckoutReturnUrl(baseUrl, orderId, status) {
-  const url = new URL(baseUrl, 'https://boutique.americanfullfightingbons.fr/');
-  url.searchParams.set('order', String(orderId));
-  url.searchParams.set('status', status);
-  return url.toString();
-}
+      // ══════════════════════════════════════════════════════════
+      //  EVENTS
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'events') {
 
-const PDF_LOGO_JPEG_BASE64 = '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';
+        if (method === 'GET' && !resId) {
+          const { results } = await env.DB.prepare(`
+            SELECT * FROM events
+            ORDER BY
+              CASE WHEN date_start >= date('now') THEN 0 ELSE 1 END ASC,
+              date_start ASC
+          `).all();
+          return json(await hydrateEvents(env.DB, results));
+        }
 
-// NOTE pour la migration : ajouter dans schema.sql ou une nouvelle migration :
-// CREATE TABLE IF NOT EXISTS admin_config (
-//   key   TEXT PRIMARY KEY,
-//   value TEXT NOT NULL
-// );
-// -- Puis générer le hash initial avec : node -e "..."  ou via un script dédié
-// -- et insérer : INSERT INTO admin_config (key, value) VALUES ('admin_password_hash', '<hash_pbkdf2>');
+        if (method === 'GET' && resId) {
+          const ev = await env.DB.prepare(
+            `SELECT * FROM events WHERE id = ?`
+          ).bind(resId).first();
+          if (!ev) return err('Événement introuvable', 404);
+          return json(await hydrateEvent(env.DB, ev));
+        }
+
+        if (method === 'POST') {
+          await requireAdmin();
+          const body = await request.json();
+          const id   = body.id || genId('evt');
+          validateEvent(body);
+          await env.DB.prepare(`
+            INSERT INTO events
+              (id, title, sub, type, status, date_start, date_end, time_start, time_end,
+               lieu, price, spots_total, spots_left, featured, is_grade, helloasso, helloasso_url)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(
+            id, body.title, body.sub, body.type,
+            body.status ?? 'disponible',
+            body.date_start, body.date_end ?? null,
+            body.time_start ?? null, body.time_end ?? null,
+            body.lieu, body.price ?? 0,
+            body.spots_total ?? 0, body.spots_left ?? body.spots_total ?? 0,
+            body.featured  ? 1 : 0, body.is_grade  ? 1 : 0,
+            body.helloasso ? 1 : 0, body.helloasso_url ?? null,
+          ).run();
+          const created = await syncEventAvailability(env.DB, id);
+          return json(created, 201);
+        }
+
+        if (method === 'PUT' && resId) {
+          await requireAdmin();
+          const body = await request.json();
+          validateEvent(body);
+          await env.DB.prepare(`
+            UPDATE events SET
+              title = ?, sub = ?, type = ?, status = ?,
+              date_start = ?, date_end = ?, time_start = ?, time_end = ?,
+              lieu = ?, price = ?, spots_total = ?, spots_left = ?,
+              featured = ?, is_grade = ?, helloasso = ?, helloasso_url = ?
+            WHERE id = ?
+          `).bind(
+            body.title, body.sub, body.type, body.status ?? 'disponible',
+            body.date_start, body.date_end ?? null,
+            body.time_start ?? null, body.time_end ?? null,
+            body.lieu, body.price ?? 0,
+            body.spots_total ?? 0, body.spots_left ?? body.spots_total ?? 0,
+            body.featured  ? 1 : 0, body.is_grade  ? 1 : 0,
+            body.helloasso ? 1 : 0, body.helloasso_url ?? null,
+            resId,
+          ).run();
+          const updated = await syncEventAvailability(env.DB, resId);
+          if (!updated) return err('Événement introuvable', 404);
+          return json(updated);
+        }
+
+        if (method === 'DELETE' && resId) {
+          await requireAdmin();
+          const info = await env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(resId).run();
+          if (info.changes === 0) return err('Événement introuvable', 404);
+          return json({ deleted: resId });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  REGISTRATIONS
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'registrations') {
+
+        // GET /api/registrations/public [public]
+        if (method === 'GET' && resId === 'public') {
+          const { results } = await env.DB.prepare(`
+            SELECT e.id AS event_id,
+                   e.title AS event_title,
+                   e.date_start,
+                   COUNT(r.id) AS registrations_count
+            FROM events e
+            LEFT JOIN registrations r
+              ON r.event_id = e.id
+             AND r.paiement_status IN ('en_attente', 'paye', 'gratuit')
+            WHERE e.date_start >= date('now')
+            GROUP BY e.id, e.title, e.date_start
+            ORDER BY e.date_start ASC
+            LIMIT 20
+          `).all();
+          return json(results);
+        }
+
+        // GET /api/registrations [admin]
+        if (method === 'GET' && !resId) {
+          await requireAdmin();
+          const eventFilter  = url.searchParams.get('event_id');
+          const statusFilter = url.searchParams.get('status');
+          let query  = `SELECT r.*, e.title as event_title FROM registrations r JOIN events e ON e.id = r.event_id WHERE 1=1`;
+          const params = [];
+          if (eventFilter)  { query += ` AND r.event_id = ?`;        params.push(eventFilter); }
+          if (statusFilter) { query += ` AND r.paiement_status = ?`; params.push(statusFilter); }
+          query += ` ORDER BY e.date_start ASC, r.created_at ASC`;
+          const stmt = env.DB.prepare(query);
+          const { results } = await (params.length ? stmt.bind(...params) : stmt).all();
+          return json(results);
+        }
+
+        // GET /api/registrations/:id [admin]
+        if (method === 'GET' && resId && !subRes) {
+          await requireAdmin();
+          const reg = await env.DB.prepare(
+            `SELECT r.*, e.title as event_title, e.price as event_price
+             FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`
+          ).bind(resId).first();
+          if (!reg) return err('Inscription introuvable', 404);
+          return json(reg);
+        }
+
+        // POST /api/registrations [public]
+        if (method === 'POST' && !resId) {
+          // Rate limiting : 10 inscriptions max par IP par minute
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(clientIp, 10, 60_000)) {
+            return err('Trop de requêtes. Veuillez patienter avant de réessayer.', 429);
+          }
+
+          const body = await request.json();
+          validateRegistration(body);
+          const normalizedEmail = String(body.email || '').toLowerCase().trim();
+          const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
+          const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
+          if (!ev)                     return err('Événement introuvable', 404);
+          if (ev.status === 'complet') return err('Événement complet', 409);
+          if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
+          if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
+
+          // Vérifier qu'il n'existe pas déjà une inscription pour cet email + cet événement
+          const existing = await env.DB.prepare(
+            `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+          ).bind(body.event_id, normalizedEmail).first();
+          if (existing) {
+            return json({
+              error: 'Une inscription existe déjà pour cet email à cet événement.',
+              code: 'duplicate_registration',
+              existing_id: existing.id,
+              paiement_status: existing.paiement_status,
+              montant: existing.montant,
+            }, 409);
+          }
+
+          const paiementStatus = ev.price === 0
+            ? 'gratuit'
+            : 'en_attente';
+
+          let info;
+          try {
+            info = await env.DB.prepare(`
+              INSERT INTO registrations (
+                event_id, nom, prenom, date_naissance, telephone, email,
+                licence_ffk, is_mineur, categorie, niveau, regime,
+                ceinture_actuelle, ceinture_visee,
+                parent_nom, parent_prenom, parent_tel,
+                message, certif_medical, droit_image, reglement_ok,
+                montant, paiement_status, helloasso_ref
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            `).bind(
+              body.event_id, body.nom, body.prenom, body.date_naissance,
+              body.telephone, normalizedEmail,
+              body.licence_ffk       ?? null, body.is_mineur ? 1 : 0,
+              body.categorie         ?? null, body.niveau    ?? null, body.regime ?? null,
+              body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
+              body.parent_nom        ?? null, body.parent_prenom  ?? null, body.parent_tel ?? null,
+              body.message           ?? null,
+              body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
+              ev.price, paiementStatus, body.helloasso_ref ?? null,
+            ).run();
+          } catch (insertError) {
+            if (!isUniqueConstraintError(insertError, 'idx_reg_unique_email_event')) {
+              throw insertError;
+            }
+            const concurrent = await env.DB.prepare(
+              `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+            ).bind(body.event_id, normalizedEmail).first();
+            return json({
+              error: 'Une inscription existe déjà pour cet email à cet événement.',
+              code: 'duplicate_registration',
+              existing_id: concurrent?.id ?? null,
+              paiement_status: concurrent?.paiement_status ?? paiementStatus,
+              montant: concurrent?.montant ?? ev.price,
+            }, 409);
+          }
+
+          await syncEventAvailability(env.DB, body.event_id);
+
+          const regData = {
+            nom: body.nom, prenom: body.prenom, email: normalizedEmail,
+            telephone: body.telephone, date_naissance: body.date_naissance,
+            categorie: body.categorie ?? null, niveau: body.niveau ?? null,
+            licence_ffk: body.licence_ffk ?? null, message: body.message ?? null,
+            is_mineur: body.is_mineur ? 1 : 0,
+            parent_nom: body.parent_nom ?? null, parent_prenom: body.parent_prenom ?? null, parent_tel: body.parent_tel ?? null,
+            paiement_status: paiementStatus,
+          };
+          const emailResults = await sendConfirmationEmails(env, { reg: regData, ev });
+          return json({
+            id: info.meta.last_row_id,
+            event_id: body.event_id,
+            paiement_status: paiementStatus,
+            montant: ev.price,
+            emails: emailResults,
+          }, 201);
+          } 
+          
+        // PUT /api/registrations/:id/status [admin]
+        if (method === 'PUT' && resId && subRes === 'status') {
+          await requireAdmin();
+          const body = await request.json();
+          const validStatuses = ['en_attente', 'paye', 'gratuit', 'annule'];
+          if (!validStatuses.includes(body.paiement_status)) {
+            return err(`Statut invalide. Valeurs : ${validStatuses.join(', ')}`);
+          }
+          const registration = await env.DB.prepare(
+            `SELECT event_id FROM registrations WHERE id = ?`
+          ).bind(resId).first();
+          if (!registration) return err('Inscription introuvable', 404);
+          const info = await env.DB.prepare(`
+            UPDATE registrations SET paiement_status = ?, helloasso_ref = COALESCE(?, helloasso_ref) WHERE id = ?
+          `).bind(body.paiement_status, body.helloasso_ref ?? null, resId).run();
+          if (info.changes === 0) return err('Inscription introuvable', 404);
+          await syncEventAvailability(env.DB, registration.event_id);
+          return json({ id: resId, paiement_status: body.paiement_status });
+        }
+
+        // DELETE /api/registrations/:id [admin]
+        // ── Supprime l'inscription ET restitue une place sur l'événement ──
+        if (method === 'DELETE' && resId) {
+          await requireAdmin();
+
+          const reg = await env.DB.prepare(
+            `SELECT event_id, paiement_status FROM registrations WHERE id = ?`
+          ).bind(resId).first();
+          if (!reg) return err('Inscription introuvable', 404);
+
+          const info = await env.DB.prepare(
+            `DELETE FROM registrations WHERE id = ?`
+          ).bind(resId).run();
+          if (info.changes === 0) return err('Inscription introuvable', 404);
+
+          await syncEventAvailability(env.DB, reg.event_id);
+
+          return json({ deleted: Number(resId), event_id: reg.event_id });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  CHECKOUT HELLOASSO
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'checkout' && method === 'POST') {
+        const body = await request.json();
+        const { event_id, nom, prenom, email } = body;
+        if (!event_id || !nom || !prenom || !email) {
+          return err('Champs requis : event_id, nom, prenom, email');
+        }
+        const rawEvent = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first();
+        const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
+        if (!ev)                     return err('Evenement introuvable', 404);
+        if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
+        if (ev.status === 'complet') return err('Evenement complet', 409);
+        if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
+        if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
+
+        const origin    = url.origin;
+        const returnUrl = `${origin}/?checkout=success&event_id=${event_id}`;
+        const errorUrl  = `${origin}/?checkout=error&event_id=${event_id}`;
+
+        const redirectUrl = await createHelloAssoCheckout(env, {
+          eventTitle: ev.title,
+          amount:     ev.price,
+          email, prenom, nom,
+          returnUrl, errorUrl,
+        });
+        return json({ redirectUrl });
+      }
+
+      return err('Route introuvable', 404);
+
+    } catch (e) {
+      if (e instanceof ApiError) return err(e.message, e.status);
+      console.error(e);
+      return err('Erreur serveur interne', 500);
+    }
+  },
+};
