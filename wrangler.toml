@@ -1,22 +1,17 @@
-name                   = "calendrier-americanfullfightingbons"
-account_id             = "a11cb0253f0870d57b54f6eaaedb439c"
-main                   = "worker.js"
-compatibility_date     = "2025-06-01"
-compatibility_flags    = ["nodejs_compat"]
+name = "calendrier-americanfullfightingbons"
+main = "worker.js"
+compatibility_date = "2025-12-17"
+compatibility_flags = ["nodejs_compat"]
 
-# ── Base de données D1 ───────────────────────────────────────────────────────────────
+# ── Base de données D1 ───────────────────────────────────────────────────────
 [[d1_databases]]
-binding       = "DB"
-database_name = "calendrier-americanfullfightingbonsdb"
-database_id   = "b146bb47-b1cc-48db-9e7c-0c8223a9fee2"   # ← wrangler d1 create calendrier-americanfullfightingbonsdb
+binding        = "DB"
+database_name  = "calendrier-americanfullfightingbonsdb"
+database_id    = "b146bb47-b1cc-48db-9e7c-0c8223a9fee2"
 
-# ── Cron — suppression automatique des événements expirés (J+5) ─────────────────────
-[triggers]
-crons = ["0 3 * * *"]   # tous les jours à 3h UTC
-
-# ── Variables d'environnement non-sensibles ──────────────────────────────────────────
+# ── Variables d'environnement non-sensibles ──────────────────────────────────
 [vars]
 ENVIRONMENT = "production"
 
-# ── Secrets (définis via GitHub Secrets, jamais ici) ────────────────────────────────
-# ADMIN_TOKEN  → wrangler secret put ADMIN_TOKEN  (ou GitHub Secret CF_ADMIN_TOKEN)
+# ── Secrets (définis via GitHub Secrets, jamais ici) ────────────────────────
+# ADMIN_TOKEN → injecté par le workflow GitHub Actions (printf sans newline)
