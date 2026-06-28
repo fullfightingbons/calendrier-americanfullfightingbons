@@ -12,9 +12,10 @@ votre-repo/
 │   └── workflows/
 │       └── deploy.yml      ← pipeline CI/CD (doit être ici, pas à la racine !)
 ├── worker.js               ← API Cloudflare Worker
-├── schema.sql              ← schéma base D1 (+ données démo)
-├── migration_add_ferme_status.sql     ← migration statut 'ferme'
-├── migration_add_unique_email_event.sql ← migration contrainte UNIQUE email+event
+├── schema.sql              ← schéma D1 initial (tables de base, + données démo)
+├── migrations/             ← migrations D1 appliquées via `wrangler d1 migrations apply`
+│   ├── 0002_add_unique_email_event.sql  ← contrainte UNIQUE email+event
+│   └── 0003_add_ferme_status.sql        ← ajout du statut 'ferme'
 ├── wrangler.toml           ← configuration Cloudflare
 └── index.html              ← front-end SPA
 ```
@@ -83,9 +84,10 @@ git push origin main
 ```
 
 GitHub Actions va automatiquement :
-1. Appliquer `schema.sql` sur la base D1 (migration)
-2. Déployer le Worker sur Cloudflare
-3. Injecter `CF_ADMIN_TOKEN` comme secret du Worker
+1. Appliquer `schema.sql` sur la base D1 (tables de base)
+2. Appliquer le dossier `migrations/` sur la base D1 (`wrangler d1 migrations apply DB --remote`)
+3. Déployer le Worker sur Cloudflare
+4. Injecter `CF_ADMIN_TOKEN` comme secret du Worker
 
 Suivez l'avancement dans l'onglet **Actions** de votre dépôt GitHub.
 
@@ -182,7 +184,7 @@ async function deleteEventFromAPI(id) {
 
 ## Déploiements suivants
 
-Chaque `git push` sur `main` redéploie automatiquement le Worker et réapplique le schéma SQL. Les `INSERT OR IGNORE` dans `schema.sql` protègent les données existantes.
+Chaque `git push` sur `main` redéploie automatiquement le Worker, réapplique `schema.sql` et applique les éventuelles nouvelles migrations du dossier `migrations/`. Les `INSERT OR IGNORE` dans `schema.sql` protègent les données existantes, et `wrangler d1 migrations apply` ne réapplique jamais une migration déjà exécutée.
 
 ---
 
