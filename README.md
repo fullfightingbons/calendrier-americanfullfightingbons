@@ -196,11 +196,28 @@ Chaque `git push` sur `main` redéploie automatiquement le Worker, réapplique `
 | GET | `/api/events/:id` | — | Détail + nombre d'inscrits |
 | POST | `/api/events` | ✅ | Créer un événement |
 | PUT | `/api/events/:id` | ✅ | Modifier un événement |
-| DELETE | `/api/events/:id` | ✅ | Supprimer un événement |
+| DELETE | `/api/events/:id` | ✅ | Supprimer un événement (archive automatiquement ses inscriptions, cf. ci-dessous) |
 | POST | `/api/registrations` | — | Créer une inscription |
 | GET | `/api/registrations` | ✅ | Lister les inscriptions |
 | GET | `/api/registrations/:id` | ✅ | Détail d'une inscription |
 | PUT | `/api/registrations/:id/status` | ✅ | Changer le statut de paiement |
 | DELETE | `/api/registrations/:id` | ✅ | Supprimer une inscription |
+| GET | `/api/archives` | ✅ | Lister les événements archivés (supprimés manuellement ou automatiquement) |
+| GET | `/api/archives/:id/csv` | ✅ | Télécharger la liste des inscrits d'une archive (CSV) |
+| DELETE | `/api/archives/:id` | ✅ | Supprimer définitivement une archive |
 
 ✅ = Header requis : `Authorization: Bearer <CF_ADMIN_TOKEN>`
+
+## Archivage automatique des événements passés
+
+Un cron quotidien (`[triggers] crons` dans `wrangler.toml`, 3h du matin UTC)
+supprime du calendrier tout événement dont la date est dépassée depuis plus
+de 5 jours. **Aucune donnée n'est perdue** : juste avant la suppression, la
+liste complète des inscrits (nom, contact, paiement...) est automatiquement
+enregistrée dans une archive consultable et téléchargeable en CSV depuis
+l'onglet **🗄 Archives** du panel admin. La suppression manuelle d'un
+événement depuis l'admin déclenche le même archivage automatique.
+
+Pour changer la fenêtre de rétention (5 jours) ou la fréquence du cron,
+modifier respectivement `purgeExpiredEvents()` dans `worker.js` et
+`crons = [...]` dans `wrangler.toml`.

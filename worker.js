@@ -364,6 +364,23 @@ async function sendBrevoEmail(env, { to, toName, subject, html }) {
   }
 }
 
+/**
+ * Échappement HTML pour les corps d'email (texte libre saisi par le public :
+ * nom, prénom, message, catégorie...). Les clients mail filtrent en général
+ * <script>, mais pas le reste du HTML — sans échappement, un participant
+ * pourrait casser la mise en page (balises non fermées) ou injecter un lien
+ * trompeur affiché comme venant du club (le mail est envoyé depuis le
+ * domaine officiel, donc plus crédible qu'un email de phishing classique).
+ */
+function escapeHtmlEmail(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 async function sendConfirmationEmails(env, { reg, ev }) {
   const CLUB_EMAIL = CLUB_CONTACT_EMAIL;
   const CLUB_NAME  = 'AMERICAN FULL FIGHTING BONS EN CHABLAIS';
@@ -382,6 +399,7 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   const participantSubject = isConfirmed
     ? `✅ Inscription confirmée — ${ev.title}`
     : `⏳ Inscription enregistrée — ${ev.title}`;
+  // Note : pas d'échappement HTML nécessaire dans le sujet (texte brut, pas de rendu HTML).
 
   const participantHtml = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
   <div style="background:#050505;padding:20px 24px;border-radius:8px 8px 0 0;text-align:center">
@@ -390,12 +408,12 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   </div>
   <div style="border:1px solid #eee;border-top:none;padding:28px 24px;border-radius:0 0 8px 8px">
     <h2 style="color:#E10600;margin-top:0">${participantTitle}</h2>
-    <p>Bonjour <strong>${reg.prenom} ${reg.nom}</strong>,</p>
+    <p>Bonjour <strong>${escapeHtmlEmail(reg.prenom)} ${escapeHtmlEmail(reg.nom)}</strong>,</p>
     <p>${participantIntro}</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
-      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Événement</td><td style="padding:8px 12px">${ev.title}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Événement</td><td style="padding:8px 12px">${escapeHtmlEmail(ev.title)}</td></tr>
       <tr><td style="padding:8px 12px;font-weight:600">Date</td><td style="padding:8px 12px">${dateStr}</td></tr>
-      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Lieu</td><td style="padding:8px 12px">${ev.lieu}</td></tr>
+      <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Lieu</td><td style="padding:8px 12px">${escapeHtmlEmail(ev.lieu)}</td></tr>
       <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700;color:#E10600">${prix}</td></tr>
       <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut dossier</td><td style="padding:8px 12px">${participantStatus}</td></tr>
     </table>
@@ -407,17 +425,17 @@ async function sendConfirmationEmails(env, { reg, ev }) {
 </body></html>`;
 
   const clubHtml = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
-  <h2 style="color:#E10600">🥊 Nouvelle inscription — ${ev.title}</h2>
+  <h2 style="color:#E10600">🥊 Nouvelle inscription — ${escapeHtmlEmail(ev.title)}</h2>
   <table style="width:100%;border-collapse:collapse">
-    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Participant</td><td style="padding:8px 12px">${reg.prenom} ${reg.nom}</td></tr>
-    <tr><td style="padding:8px 12px;font-weight:600">Email</td><td style="padding:8px 12px"><a href="mailto:${reg.email}">${reg.email}</a></td></tr>
-    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Téléphone</td><td style="padding:8px 12px">${reg.telephone}</td></tr>
-    <tr><td style="padding:8px 12px;font-weight:600">Date de naissance</td><td style="padding:8px 12px">${reg.date_naissance}</td></tr>
-    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Catégorie</td><td style="padding:8px 12px">${reg.categorie || '—'}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Participant</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.prenom)} ${escapeHtmlEmail(reg.nom)}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Email</td><td style="padding:8px 12px"><a href="mailto:${encodeURIComponent(reg.email)}">${escapeHtmlEmail(reg.email)}</a></td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Téléphone</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.telephone)}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Date de naissance</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.date_naissance)}</td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Catégorie</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.categorie) || '—'}</td></tr>
     <tr><td style="padding:8px 12px;font-weight:600">Montant</td><td style="padding:8px 12px;font-weight:700">${prix}</td></tr>
     <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut paiement</td><td style="padding:8px 12px">${reg.paiement_status}</td></tr>
-    ${reg.message ? `<tr><td style="padding:8px 12px;font-weight:600">Message</td><td style="padding:8px 12px">${reg.message}</td></tr>` : ''}
-    ${reg.is_mineur ? `<tr style="background:#fff3cd"><td style="padding:8px 12px;font-weight:600">⚠ Mineur</td><td style="padding:8px 12px">${reg.parent_prenom} ${reg.parent_nom} — ${reg.parent_tel}</td></tr>` : ''}
+    ${reg.message ? `<tr><td style="padding:8px 12px;font-weight:600">Message</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.message)}</td></tr>` : ''}
+    ${reg.is_mineur ? `<tr style="background:#fff3cd"><td style="padding:8px 12px;font-weight:600">⚠ Mineur</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.parent_prenom)} ${escapeHtmlEmail(reg.parent_nom)} — ${escapeHtmlEmail(reg.parent_tel)}</td></tr>` : ''}
   </table>
 </body></html>`;
 
@@ -473,13 +491,47 @@ export {
 };
 
 
-// ── Suppression automatique des événements expirés (cron J+5) ──
+/**
+ * Archive l'instantané des inscriptions d'un événement (snapshot JSON dans
+ * event_archives, téléchargeable en CSV depuis l'onglet Archives de l'admin),
+ * puis supprime l'événement. DELETE FROM events déclenche ON DELETE CASCADE
+ * sur registrations — sans cet archivage préalable, les données de présence/
+ * paiement disparaîtraient définitivement avec l'événement.
+ * Utilisée à la fois par la suppression manuelle (admin) et par le cron
+ * purgeExpiredEvents() ci-dessous.
+ * @returns {Promise<{archived_registrations: number}|null>} null si l'événement n'existe pas.
+ */
+async function archiveAndDeleteEvent(db, eventId) {
+  const eventRow = await db.prepare(`SELECT * FROM events WHERE id = ?`).bind(eventId).first();
+  if (!eventRow) return null;
+
+  const { results: regsToArchive } = await db.prepare(
+    `SELECT * FROM registrations WHERE event_id = ? ORDER BY created_at ASC`
+  ).bind(eventId).all();
+
+  await db.prepare(`
+    INSERT INTO event_archives (event_id, title, type, date_start, date_end, lieu, registrations_count, registrations_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    eventRow.id, eventRow.title, eventRow.type, eventRow.date_start, eventRow.date_end, eventRow.lieu,
+    regsToArchive.length, JSON.stringify(regsToArchive),
+  ).run();
+
+  await db.prepare(`DELETE FROM events WHERE id = ?`).bind(eventId).run();
+  return { archived_registrations: regsToArchive.length };
+}
+
+// ── Suppression + archivage automatiques des événements expirés (cron J+5) ──
+// Activé via [triggers] crons dans wrangler.toml (cron quotidien). Chaque
+// événement dont la date de fin (ou de début si pas de date_end) est passée
+// depuis plus de 5 jours est automatiquement archivé (cf. archiveAndDeleteEvent
+// ci-dessus — instantané JSON des inscriptions conservé dans event_archives,
+// téléchargeable en CSV depuis l'onglet Archives de l'admin) puis retiré du
+// calendrier. Aucune donnée d'inscription/paiement n'est perdue : seul
+// l'événement disparaît de la liste active.
 async function purgeExpiredEvents(env) {
-  // Supprime les événements dont la date de fin (ou de début si pas de date_end)
-  // est dépassée depuis plus de 5 jours.
-  // Les inscriptions liées sont supprimées automatiquement via ON DELETE CASCADE.
-  const result = await env.DB.prepare(`
-    DELETE FROM events
+  const { results: expired } = await env.DB.prepare(`
+    SELECT id FROM events
     WHERE (
       CASE
         WHEN date_end IS NOT NULL AND date_end != ''
@@ -487,12 +539,22 @@ async function purgeExpiredEvents(env) {
         ELSE date_start
       END
     ) < date('now', '-5 days')
-  `).run();
-  console.log(`[cron] purgeExpiredEvents: ${result.changes ?? 0} événement(s) supprimé(s)`);
+  `).all();
+
+  let archivedEvents = 0;
+  let archivedRegistrations = 0;
+  for (const { id } of expired) {
+    const result = await archiveAndDeleteEvent(env.DB, id);
+    if (result) {
+      archivedEvents += 1;
+      archivedRegistrations += result.archived_registrations;
+    }
+  }
+  console.log(`[cron] purgeExpiredEvents: ${archivedEvents} événement(s) archivé(s) puis supprimé(s), ${archivedRegistrations} inscription(s) archivée(s)`);
 }
 
 export default {
-  // ── Cron trigger — exécuté selon wrangler.toml [triggers] crons ──
+  // ── Cron trigger quotidien (cf. [triggers] crons dans wrangler.toml) ──
   async scheduled(_event, env, _ctx) {
     await purgeExpiredEvents(env);
   },
@@ -593,6 +655,14 @@ export default {
     try {
       if (resource === 'auth') {
         if (method === 'POST' && resId === 'login') {
+          // Rate limiting : le mot de passe admin (ADMIN_TOKEN) est un secret unique
+          // partagé par tout le bureau, sans verrouillage de compte possible — sans
+          // limite ici, un brute-force est possible (même protection que sur les
+          // inscriptions publiques, mais plus stricte vu la sensibilité de la cible).
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(`login:${clientIp}`, 5, 5 * 60_000)) {
+            return err('Trop de tentatives de connexion. Réessayez dans quelques minutes.', 429);
+          }
           const body = await request.json();
           const password = String(body?.password || '').trim();
           if (!password || !secureEquals(password, String(env.ADMIN_TOKEN || '').trim())) {
@@ -703,8 +773,68 @@ export default {
 
         if (method === 'DELETE' && resId) {
           await requireAdmin();
-          const info = await env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(resId).run();
-          if (info.changes === 0) return err('Événement introuvable', 404);
+          // Archivage automatique des inscriptions avant suppression (cf.
+          // archiveAndDeleteEvent ci-dessus) — même logique que le cron
+          // purgeExpiredEvents, déclenchée ici manuellement par l'admin.
+          const result = await archiveAndDeleteEvent(env.DB, resId);
+          if (!result) return err('Événement introuvable', 404);
+          return json({ deleted: resId, archived_registrations: result.archived_registrations });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  ARCHIVES — inscriptions des événements supprimés
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'archives') {
+        await requireAdmin();
+
+        // GET /api/archives [admin] — liste des archives (sans le JSON complet)
+        if (method === 'GET' && !resId) {
+          const { results } = await env.DB.prepare(
+            `SELECT id, event_id, title, type, date_start, date_end, lieu, registrations_count, archived_at
+             FROM event_archives ORDER BY archived_at DESC`
+          ).all();
+          return json(results);
+        }
+
+        // GET /api/archives/:id/csv [admin] — export CSV de l'archive
+        if (method === 'GET' && resId && subRes === 'csv') {
+          const archive = await env.DB.prepare(`SELECT * FROM event_archives WHERE id = ?`).bind(resId).first();
+          if (!archive) return err('Archive introuvable', 404);
+          let regs = [];
+          try { regs = JSON.parse(archive.registrations_json) || []; } catch { regs = []; }
+
+          const headers = ['Nom', 'Prénom', 'Date de naissance', 'Téléphone', 'Email', 'Licence FFK', 'Mineur', 'Catégorie', 'Niveau', 'Régime', 'Parent', 'Téléphone parent', 'Message', 'Montant', 'Statut paiement'];
+          const csvEscape = (value) => {
+            const str = String(value ?? '');
+            return /[";\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+          };
+          const rows = regs.map(r => [
+            r.nom, r.prenom, r.date_naissance, r.telephone, r.email, r.licence_ffk || '',
+            r.is_mineur ? 'Oui' : 'Non', r.categorie || '', r.niveau || '', r.regime || '',
+            r.is_mineur ? `${r.parent_prenom || ''} ${r.parent_nom || ''}`.trim() : '',
+            r.is_mineur ? (r.parent_tel || '') : '',
+            r.message || '', r.montant, r.paiement_status,
+          ].map(csvEscape).join(';'));
+          const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
+
+          const safeFilename = String(archive.title || 'evenement')
+            .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'evenement';
+          return new Response(csv, {
+            headers: securityHeaders({
+              ...corsHeaders,
+              'Content-Type': 'text/csv; charset=utf-8',
+              'Content-Disposition': `attachment; filename="inscrits_${safeFilename}_${archive.date_start || ''}.csv"`,
+            }),
+          });
+        }
+
+        // DELETE /api/archives/:id [admin] — purge manuelle d'une archive
+        // (une fois le CSV téléchargé et sauvegardé ailleurs si besoin)
+        if (method === 'DELETE' && resId) {
+          const info = await env.DB.prepare(`DELETE FROM event_archives WHERE id = ?`).bind(resId).run();
+          if (info.changes === 0) return err('Archive introuvable', 404);
           return json({ deleted: resId });
         }
       }
@@ -797,6 +927,14 @@ export default {
 
           let info;
           try {
+            // INSERT...SELECT...WHERE : l'ensemble (comptage des places + insertion)
+            // est exécuté comme une seule instruction SQL atomique côté D1, ce qui
+            // élimine la race condition TOCTOU du contrôle ev.spots_left<=0 fait
+            // juste au-dessus (deux requêtes simultanées sur la toute dernière place
+            // pourraient sinon passer ce contrôle avant qu'aucune n'ait encore écrit
+            // en base, et surbooker l'événement). Si la sous-requête WHERE est fausse
+            // au moment de l'exécution réelle de l'INSERT, aucune ligne n'est insérée
+            // (info.meta.changes === 0), ce qu'on détecte juste après.
             info = await env.DB.prepare(`
               INSERT INTO registrations (
                 event_id, nom, prenom, date_naissance, telephone, email,
@@ -805,7 +943,12 @@ export default {
                 parent_nom, parent_prenom, parent_tel,
                 message, certif_medical, droit_image, reglement_ok,
                 montant, paiement_status, helloasso_ref
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              )
+              SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+              WHERE (
+                SELECT COUNT(*) FROM registrations r
+                WHERE r.event_id = ? AND r.paiement_status IN ('en_attente', 'paye', 'gratuit')
+              ) < (SELECT spots_total FROM events WHERE id = ?)
             `).bind(
               body.event_id, body.nom, body.prenom, body.date_naissance,
               body.telephone, normalizedEmail,
@@ -816,6 +959,7 @@ export default {
               body.message           ?? null,
               body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
               ev.price, paiementStatus, body.helloasso_ref ?? null,
+              body.event_id, body.event_id,
             ).run();
           } catch (insertError) {
             if (!isUniqueConstraintError(insertError, 'idx_reg_unique_email_event')) {
@@ -831,6 +975,13 @@ export default {
               paiement_status: concurrent?.paiement_status ?? paiementStatus,
               montant: concurrent?.montant ?? ev.price,
             }, 409);
+          }
+
+          if (info.meta.changes === 0) {
+            // La sous-requête WHERE a empêché l'insertion : plus de place au moment
+            // exact de l'écriture, alors que le contrôle initial l'avait laissé passer.
+            await syncEventAvailability(env.DB, body.event_id);
+            return err('Plus de places disponibles', 409);
           }
 
           await syncEventAvailability(env.DB, body.event_id);

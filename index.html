@@ -678,6 +678,7 @@ footer span{color:#888}
       <div class="admin-tabs">
         <button class="admin-tab active" onclick="switchAdminTab('events',this)">📅 Événements</button>
         <button class="admin-tab" onclick="switchAdminTab('registrations',this)">👥 Inscriptions</button>
+        <button class="admin-tab" onclick="switchAdminTab('archives',this)">🗄 Archives</button>
       </div>
 
       <!-- ── Onglet Événements ── -->
@@ -732,6 +733,15 @@ footer span{color:#888}
               <tr><td colspan="7" class="regs-loading">Chargement…</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ── Onglet Archives ── -->
+      <div class="admin-tab-content" id="tab-archives">
+        <div class="admin-section-title">ARCHIVES DES ÉVÉNEMENTS PASSÉS</div>
+        <div class="admin-section-sub">Chaque événement supprimé (manuellement ou automatiquement, 5 jours après sa date) conserve ici la liste de ses inscrits, téléchargeable en CSV.</div>
+        <div class="admin-events-list" id="admin-archives-list">
+          <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
         </div>
       </div>
     </div>
@@ -854,6 +864,23 @@ footer span{color:#888}
 /* ════════════════════════════════════════════════════
    CONFIGURATION
    ════════════════════════════════════════════════════ */
+
+/**
+ * Échappement HTML — les vues admin (inscriptions, événements) injectent des
+ * champs saisis par le public (nom, email, téléphone, catégorie...) via
+ * innerHTML sans échappement. Sans cette protection, un visiteur peut
+ * empoisonner son nom/email avec du HTML/JS qui s'exécute dans la session
+ * authentifiée de l'admin dès qu'il ouvre le panel d'inscriptions.
+ */
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const CONFIG = {
   CLUB_EMAIL: 'fullfightingbons@gmail.com',
   CLUB_NAME:  'AMERICAN FULL FIGHTING BONS EN CHABLAIS',
@@ -1108,7 +1135,7 @@ async function loadHeroCalendar() {
       const statusLabel = ev.status === 'complet' ? 'Complet' : ev.status === 'ferme' ? '🔒 Fermé' : `${ev.spots_left || 0} places`;
       return `<tr>
         <td class="col-date">${dateStr}</td>
-        <td class="col-event">${ev.title}</td>
+        <td class="col-event">${escapeHtml(ev.title)}</td>
         <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">${count > 0 ? count + ' inscrit' + (count > 1 ? 's' : '') : 'Aucune inscription'}</td>
         <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
       </tr>`;
@@ -1150,14 +1177,14 @@ async function enrichCalendarWithNames(evtDetails) {
       if (list.length === 0) {
         rows.push(`<tr>
           <td class="col-date">${dateStr}</td>
-          <td class="col-event">${ev.title}</td>
+          <td class="col-event">${escapeHtml(ev.title)}</td>
           <td class="col-name" colspan="2" style="color:rgba(255,255,255,.35);font-style:italic">Aucune inscription</td>
           <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
         </tr>`);
       } else {
         rows.push(`<tr style="background:rgba(225,6,0,.1)">
           <td class="col-date">${dateStr}</td>
-          <td class="col-event" style="font-weight:700;color:white" colspan="3">${ev.title} — <span style="color:var(--gold)">${list.length} inscrit${list.length>1?'s':''}</span></td>
+          <td class="col-event" style="font-weight:700;color:white" colspan="3">${escapeHtml(ev.title)} — <span style="color:var(--gold)">${list.length} inscrit${list.length>1?'s':''}</span></td>
           <td><span class="col-status ${statusClass}">${statusLabel}</span></td>
         </tr>`);
         list.forEach(reg => {
@@ -1165,9 +1192,9 @@ async function enrichCalendarWithNames(evtDetails) {
           const payLabel = reg.paiement_status==='paye'?'Payé':reg.paiement_status==='gratuit'?'Gratuit':'En attente';
           rows.push(`<tr>
             <td class="col-date" style="color:rgba(255,255,255,.25);font-size:11px">↳</td>
-            <td class="col-event" style="color:rgba(255,255,255,.4);font-size:12px">${ev.title}</td>
-            <td class="col-name">${reg.nom} ${reg.prenom}</td>
-            <td class="col-cat">${reg.categorie||'—'}</td>
+            <td class="col-event" style="color:rgba(255,255,255,.4);font-size:12px">${escapeHtml(ev.title)}</td>
+            <td class="col-name">${escapeHtml(reg.nom)} ${escapeHtml(reg.prenom)}</td>
+            <td class="col-cat">${escapeHtml(reg.categorie)||'—'}</td>
             <td><span class="col-status ${payClass}">${payLabel}</span></td>
           </tr>`);
         });
@@ -1304,11 +1331,11 @@ function buildSummary() {
   const cat    = document.getElementById('f-categorie').value||'Non renseigné';
   const prix   = currentEvent.price===0?'Gratuit':'€'+currentEvent.price;
   document.getElementById('summary-content').innerHTML=`
-    <div class="summary-row"><span class="label">Événement</span><span>${currentEvent.title}</span></div>
-    <div class="summary-row"><span class="label">Participant</span><span>${nom} ${prenom}</span></div>
-    <div class="summary-row"><span class="label">Date de naissance</span><span>${dob}</span></div>
-    <div class="summary-row"><span class="label">Email</span><span>${email}</span></div>
-    <div class="summary-row"><span class="label">Catégorie</span><span>${cat}</span></div>
+    <div class="summary-row"><span class="label">Événement</span><span>${escapeHtml(currentEvent.title)}</span></div>
+    <div class="summary-row"><span class="label">Participant</span><span>${escapeHtml(nom)} ${escapeHtml(prenom)}</span></div>
+    <div class="summary-row"><span class="label">Date de naissance</span><span>${escapeHtml(dob)}</span></div>
+    <div class="summary-row"><span class="label">Email</span><span>${escapeHtml(email)}</span></div>
+    <div class="summary-row"><span class="label">Catégorie</span><span>${escapeHtml(cat)}</span></div>
     <div class="summary-row"><span class="label">Montant total</span><span style="font-weight:600;color:var(--red)">${prix}</span></div>
   `;
 }
@@ -1439,16 +1466,16 @@ function showSuccess() {
       console.log('Inscription gratuite enregistrée, id:', r.id);
       const participantEmailSent = !!r?.emails?.participant?.ok;
       const emailText = participantEmailSent
-        ? `Un email récapitulatif a été envoyé à <strong>${email}</strong>.`
+        ? `Un email récapitulatif a été envoyé à <strong>${escapeHtml(email)}</strong>.`
         : `L'inscription est enregistrée. Si vous ne recevez pas d’email, contactez le club.`;
       document.querySelector('.modal-body').innerHTML=`
         <div class="success-screen">
           <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
           <div class="success-title">INSCRIPTION VALIDÉE</div>
-          <p class="success-sub">Votre inscription à <strong>${currentEvent.title}</strong> a bien été enregistrée. ${emailText}</p>
+          <p class="success-sub">Votre inscription à <strong>${escapeHtml(currentEvent.title)}</strong> a bien été enregistrée. ${emailText}</p>
           <div class="recap-card">
-            <div class="recap-row"><span class="recap-label">Participant</span><span>${nom} ${prenom}</span></div>
-            <div class="recap-row"><span class="recap-label">Événement</span><span>${currentEvent.title}</span></div>
+            <div class="recap-row"><span class="recap-label">Participant</span><span>${escapeHtml(nom)} ${escapeHtml(prenom)}</span></div>
+            <div class="recap-row"><span class="recap-label">Événement</span><span>${escapeHtml(currentEvent.title)}</span></div>
             <div class="recap-row"><span class="recap-label">Montant</span><span style="font-weight:600">Gratuit</span></div>
             <div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ Confirmé</span></div>
           </div>
@@ -1550,6 +1577,7 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
   if (tab==='registrations') loadRegistrations();
+  if (tab==='archives') loadArchives();
 }
 
 /* ════════════════════════════════════════════════════
@@ -1562,7 +1590,7 @@ function populateRegsEventSelect() {
   const current = sel.value;
   sel.innerHTML = '<option value="">Tous les événements</option>' +
     adminEvents.map(ev =>
-      `<option value="${ev.id}"${ev.id===current?' selected':''}>${ev.title}</option>`
+      `<option value="${ev.id}"${ev.id===current?' selected':''}>${escapeHtml(ev.title)}</option>`
     ).join('');
 }
 
@@ -1614,19 +1642,28 @@ function renderRegsTable(regs) {
   tbody.innerHTML = regs.map(r => `
     <tr>
       <td>
-        <div class="reg-name">${r.nom} ${r.prenom}</div>
-        <div class="reg-email">${r.email}</div>
+        <div class="reg-name">${escapeHtml(r.nom)} ${escapeHtml(r.prenom)}</div>
+        <div class="reg-email">${escapeHtml(r.email)}</div>
         ${r.is_mineur ? '<div style="font-size:11px;color:#B7770D;margin-top:2px">⚠ Mineur</div>' : ''}
       </td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#555">${r.event_title||'—'}</td>
-      <td style="font-size:12px;color:var(--muted);white-space:nowrap">${r.date_naissance||'—'}</td>
-      <td style="font-size:12px;white-space:nowrap">${r.telephone||'—'}</td>
-      <td style="font-size:12px">${r.categorie||'—'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#555">${escapeHtml(r.event_title)||'—'}</td>
+      <td style="font-size:12px;color:var(--muted);white-space:nowrap">${escapeHtml(r.date_naissance)||'—'}</td>
+      <td style="font-size:12px;white-space:nowrap">${escapeHtml(r.telephone)||'—'}</td>
+      <td style="font-size:12px">${escapeHtml(r.categorie)||'—'}</td>
       <td><span class="reg-pay ${payClasses[r.paiement_status]||''}">${payLabels[r.paiement_status]||r.paiement_status}</span></td>
-      <td><button class="btn-del-reg" onclick="askDeleteReg(${r.id},'${(r.nom+' '+r.prenom).replace(/'/g,"\\'")}')">🗑 Supprimer</button></td>
+      <td><button class="btn-del-reg" data-reg-id="${r.id}" data-reg-name="${escapeHtml(r.nom+' '+r.prenom)}">🗑 Supprimer</button></td>
     </tr>
   `).join('');
 }
+
+// Délégation d'événement (au lieu d'un onclick inline construit avec des
+// données saisies par le public) : évite toute possibilité d'injection via
+// l'attribut onclick, et reste attachée même si le tbody est re-rendu.
+document.getElementById('regs-tbody')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('.btn-del-reg');
+  if (!btn) return;
+  askDeleteReg(btn.dataset.regId, btn.dataset.regName);
+});
 
 function askDeleteReg(id, name) {
   pendingDeleteId = 'reg_' + id;
@@ -1653,6 +1690,99 @@ async function doDeleteReg(id) {
     await loadRegistrations();
     loadHeroCalendar();
   } catch(e) {
+    alert('Erreur lors de la suppression : ' + e.message);
+    closeConfirm();
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   ADMIN — ARCHIVES (événements supprimés, manuellement ou
+   automatiquement 5 jours après leur date, avec leurs inscriptions
+   conservées en instantané JSON et téléchargeables en CSV)
+   ════════════════════════════════════════════════════ */
+async function loadArchives() {
+  const list = document.getElementById('admin-archives-list');
+  list.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>`;
+  try {
+    const archives = await fetch(CONFIG.API_URL + '/api/archives', {
+      credentials: 'include',
+      headers: API._adminHeaders()
+    }).then(r => { if (!r.ok) throw new Error('Erreur ' + r.status); return r.json(); });
+    renderArchivesList(archives);
+  } catch (e) {
+    list.innerHTML = `<div style="padding:2rem;text-align:center;color:#C0392B;font-size:13px">Erreur de chargement : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderArchivesList(archives) {
+  const list = document.getElementById('admin-archives-list');
+  if (!archives.length) {
+    list.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Aucune archive pour le moment. Les événements supprimés (manuellement ou automatiquement) apparaîtront ici avec leur liste d'inscrits.</div>`;
+    return;
+  }
+  list.innerHTML = archives.map(a => {
+    const dateStr = a.date_start ? new Date(a.date_start + 'T00:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) : '—';
+    const archivedStr = new Date(a.archived_at).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+    return `<div class="admin-event-row">
+      <div class="admin-event-color" style="background:${typeColors[a.type]||'#999'}"></div>
+      <div class="admin-event-info">
+        <div class="admin-event-name">${escapeHtml(a.title)}</div>
+        <div class="admin-event-meta">${dateStr} · ${escapeHtml(a.lieu)||'—'} · ${a.registrations_count} inscrit${a.registrations_count>1?'s':''} · archivé le ${archivedStr}</div>
+      </div>
+      <div class="admin-actions">
+        <button class="admin-btn-edit" data-archive-id="${a.id}" data-archive-action="download">⬇ Télécharger CSV</button>
+        <button class="admin-btn-del"  data-archive-id="${a.id}" data-archive-title="${escapeHtml(a.title)}" data-archive-action="delete">🗑 Supprimer l'archive</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Délégation d'événement (cohérent avec le reste de l'admin : pas de
+// données utilisateur dans des onclick inline).
+document.getElementById('admin-archives-list')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-archive-action]');
+  if (!btn) return;
+  const id = btn.dataset.archiveId;
+  if (btn.dataset.archiveAction === 'download') downloadArchiveCsv(id);
+  if (btn.dataset.archiveAction === 'delete')   askDeleteArchive(id, btn.dataset.archiveTitle);
+});
+
+async function downloadArchiveCsv(id) {
+  try {
+    const r = await fetch(CONFIG.API_URL + '/api/archives/' + id + '/csv', {
+      credentials: 'include',
+      headers: API._adminHeaders()
+    });
+    if (!r.ok) throw new Error('Erreur ' + r.status);
+    const blob = await r.blob();
+    const disposition = r.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `inscrits_${id}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Erreur lors du téléchargement : ' + e.message);
+  }
+}
+
+function askDeleteArchive(id, title) {
+  pendingDeleteId = 'archive_' + id;
+  document.getElementById('confirm-title').textContent = 'SUPPRIMER CETTE ARCHIVE ?';
+  document.getElementById('confirm-msg').textContent =
+    `Supprimer définitivement l'archive de "${title}" ? Pensez à télécharger le CSV au préalable si besoin : cette action est irréversible.`;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-yes-btn').onclick = () => doDeleteArchive(id);
+}
+
+async function doDeleteArchive(id) {
+  try {
+    await API.adminDelete('/api/archives/' + id);
+    closeConfirm();
+    await loadArchives();
+  } catch (e) {
     alert('Erreur lors de la suppression : ' + e.message);
     closeConfirm();
   }
@@ -1694,10 +1824,10 @@ if (!grouped[key]) {
 
     const rows = regs.map((r, i) => `
       <tr style="background:${i % 2 === 0 ? '#1a1a1a' : '#111'}">
-        <td style="padding:10px 16px;font-size:14px;font-weight:600;color:#f5f5f5;border-bottom:1px solid #222">${r.nom} ${r.prenom}</td>
-        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${r.email}</td>
-        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${r.telephone || '—'}</td>
-        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${r.categorie || '—'}</td>
+        <td style="padding:10px 16px;font-size:14px;font-weight:600;color:#f5f5f5;border-bottom:1px solid #222">${escapeHtml(r.nom)} ${escapeHtml(r.prenom)}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${escapeHtml(r.email)}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${escapeHtml(r.telephone) || '—'}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#9b9b9b;border-bottom:1px solid #222">${escapeHtml(r.categorie) || '—'}</td>
         <td style="padding:10px 16px;border-bottom:1px solid #222;text-align:center">
           <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${payColors[r.paiement_status] || '#9ca3af'}22;color:${payColors[r.paiement_status] || '#9ca3af'};border:1px solid ${payColors[r.paiement_status] || '#9ca3af'}44">
             ${payLabels[r.paiement_status] || r.paiement_status}
@@ -1709,8 +1839,8 @@ if (!grouped[key]) {
     return `
       <div style="margin-bottom:32px;break-inside:avoid">
         <div style="background:#E10600;padding:8px 20px;border-radius:8px 8px 0 0;display:flex;align-items:baseline;justify-content:space-between;gap:16px">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:white">${title}</div>
-          <div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:500;text-transform:capitalize;white-space:nowrap">${dateStr}${lieu ? ' · ' + lieu : ''}</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:white">${escapeHtml(title)}</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:500;text-transform:capitalize;white-space:nowrap">${dateStr}${lieu ? ' · ' + escapeHtml(lieu) : ''}</div>
         </div>
         <div style="background:#0f0f0f;border:1px solid #242424;border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
           <table style="width:100%;border-collapse:collapse">
@@ -1798,8 +1928,8 @@ function renderAdminList() {
     return `<div class="admin-event-row${rowClass}">
       <div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>
       <div class="admin-event-info">
-        <div class="admin-event-name">${ev.title}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}</div>
-        <div class="admin-event-meta">${typeLabels[ev.type]||ev.type} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${ev.lieu}</div>
+        <div class="admin-event-name">${escapeHtml(ev.title)}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}</div>
+        <div class="admin-event-meta">${escapeHtml(typeLabels[ev.type]||ev.type)} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${escapeHtml(ev.lieu)}</div>
       </div>
       <div class="admin-event-badges"><span class="admin-spots-badge ${spotsClass}">${spotsTxt}</span></div>
       <div class="admin-price-tag">${priceTxt}</div>
@@ -2023,11 +2153,11 @@ function buildCard(ev) {
   return `<div class="event-card${featured}" data-type="${ev.type}${ev.price===0?' gratuit':''}"${clickCard}${opacity}>
     <div class="card-badge-row">${typeBadge}<span class="card-spots ${spotsClass}">${spotsTxt}</span></div>
     <div class="card-body">
-      <div class="card-title">${ev.title}</div>
-      <div class="card-subtitle">${ev.sub}</div>
+      <div class="card-title">${escapeHtml(ev.title)}</div>
+      <div class="card-subtitle">${escapeHtml(ev.sub)}</div>
       <div class="card-meta">
         <div class="card-meta-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${d}</div>
-        <div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>${ev.lieu}</div>
+        <div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>${escapeHtml(ev.lieu)}</div>
         ${horaires}
       </div>
     </div>

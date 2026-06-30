@@ -122,14 +122,17 @@ BEGIN
 END;
 
 -- ──────────────────────────────────────────────────────────────
--- DONNÉES INITIALES — événements démo (copiés depuis index.html)
--- ──────────────────────────────────────────────────────────────
-INSERT OR IGNORE INTO events
-  (id, title, sub, type, status, date_start, date_end, time_start, time_end, lieu, price, spots_total, spots_left, featured, is_grade, helloasso)
-VALUES
-  ('stage1',    'Stage Été — Frappe & Déplacement',  'Tous niveaux · 2 jours intensifs', 'stage',       'disponible', '2026-07-04', '2026-07-05', '09:00', '18:00', 'Dojo du club, Bons-en-Chablais', 80,  20,  14, 1, 0, 0),
-  ('grade1',    'Passage de Grade — Ceintures',      'Toutes ceintures · Examinateurs FFK', 'grade',    'disponible', '2026-06-20', NULL,         '10:00', '13:00', 'Dojo du club, Bons-en-Chablais', 0,   30,  27, 0, 1, 0),
-  ('stage2',    'Stage Régional FFK',                'Ceintures oranges et plus · 1 jour', 'stage',     'disponible', '2026-07-11', NULL,         '09:00', '17:00', 'Annecy (lieu précisé par mail)',  40,  12,  12, 0, 0, 0),
-  ('seminar1',  'Séminaire Mental & Performance',    'Tous adhérents · Après-midi',        'seminaire', 'disponible', '2026-09-05', NULL,         '14:00', '18:00', 'Dojo du club',                   20,  20,   6, 0, 0, 0),
-  ('compet1',   'Championnat Régional',              'Sélection club · Compétiteurs',      'competition','complet',   '2026-10-17', NULL,         NULL,    NULL,    'Lyon',                           25,  30,   0, 0, 0, 0),
-  ('compet2',   'Interclub Amical Été',              'Tous niveaux · Ambiance détendue',   'competition','disponible','2026-07-18', NULL,         '10:00', '17:00', 'Thonon-les-Bains',               0,   30,  30, 0, 0, 0);
+-- Pas de données de démonstration ici.
+--
+-- ⚠️ Ce fichier est réexécuté par .github/workflows/deploy.yml À CHAQUE PUSH
+-- sur main (wrangler d1 execute --file=schema.sql --remote), pas seulement
+-- à la création de la base. Un ancien `INSERT OR IGNORE INTO events` avec
+-- 6 événements de démonstration figurait ici : leur id étant fixe
+-- (stage1, grade1, stage2, seminar1, compet1, compet2), supprimer l'un de
+-- ces événements depuis l'admin libérait son id, et le redéploiement
+-- suivant le recréait aussitôt avec INSERT OR IGNORE (l'id n'existant
+-- plus, la clause OR IGNORE ne bloquait rien). D'où la réapparition
+-- d'événements fantômes à chaque déploiement. Supprimé : si des données
+-- de démonstration sont nécessaires un jour, les insérer une seule fois
+-- via une migration dans migrations/ (jamais réexécutée une fois appliquée),
+-- jamais ici.

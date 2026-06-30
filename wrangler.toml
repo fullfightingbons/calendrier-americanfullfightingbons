@@ -13,5 +13,13 @@ database_id    = "b146bb47-b1cc-48db-9e7c-0c8223a9fee2"
 [vars]
 ENVIRONMENT = "production"
 
+# ── Cron quotidien — archivage + suppression des événements terminés depuis
+#    plus de 5 jours (cf. purgeExpiredEvents dans worker.js). Les inscriptions
+#    sont archivées (snapshot JSON + export CSV) avant suppression, jamais
+#    perdues. Exécution à 3h du matin (heure UTC), en dehors des heures
+#    d'usage du calendrier.
+[triggers]
+crons = ["0 3 * * *"]
+
 # ── Secrets (définis via GitHub Secrets, jamais ici) ────────────────────────
 # ADMIN_TOKEN → injecté par le workflow GitHub Actions (printf sans newline)
