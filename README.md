@@ -44,7 +44,7 @@ Committez `wrangler.toml` mis à jour dans votre dépôt GitHub.
 
 ---
 
-## Étape 2 — Ajouter les 3 secrets GitHub
+## Étape 2 — Ajouter les 4 secrets GitHub
 
 Dans votre dépôt GitHub : **Settings → Secrets and variables → Actions → New repository secret**
 
@@ -53,9 +53,18 @@ Dans votre dépôt GitHub : **Settings → Secrets and variables → Actions →
 | `CF_API_TOKEN` | Token API Cloudflare | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → *Edit Cloudflare Workers* |
 | `CF_ACCOUNT_ID` | ID de votre compte | Cloudflare Dashboard → barre latérale droite |
 | `CF_ADMIN_TOKEN` | Mot de passe admin de votre choix | Inventez-en un fort, ex: `AFF-Admin-2025!` |
+| `CF_SESSION_SECRET` | Chaîne aléatoire de 32+ caractères | Générez-la avec `openssl rand -base64 32` |
 
 > ⚠️ Le token API doit avoir les permissions :
 > **Workers Scripts:Edit**, **D1:Edit**, **Account Settings:Read**
+>
+> ⚠️ `CF_SESSION_SECRET` sert à signer (HMAC) le cookie de session admin une
+> fois le mot de passe validé (voir `getSessionSecret()` dans `worker.js`).
+> **Sans lui, la connexion échoue toujours** — même avec le bon mot de passe
+> — et l'API renvoie une erreur 500 que le frontend affiche à tort comme
+> "Mot de passe incorrect". Générez-le **une seule fois** ; le changer
+> déconnectera tous les admins actuellement connectés (leurs cookies
+> deviendront invalides), ce qui est sans danger.
 
 ### Secrets Worker supplémentaires (à injecter via `wrangler secret put`)
 
@@ -87,7 +96,8 @@ GitHub Actions va automatiquement :
 1. Appliquer `schema.sql` sur la base D1 (tables de base)
 2. Appliquer le dossier `migrations/` sur la base D1 (`wrangler d1 migrations apply DB --remote`)
 3. Déployer le Worker sur Cloudflare
-4. Injecter `CF_ADMIN_TOKEN` comme secret du Worker
+4. Injecter `CF_ADMIN_TOKEN` comme secret du Worker (`ADMIN_TOKEN`)
+5. Injecter `CF_SESSION_SECRET` comme secret du Worker (`SESSION_SECRET`)
 
 Suivez l'avancement dans l'onglet **Actions** de votre dépôt GitHub.
 
@@ -152,21 +162,35 @@ async function submitRegistration(payload) {
 }
 ```
 
-### Sauvegarder un événement (admin)
+### Se connecter en admin et sauvegarder un événement
+
+> ⚠️ L'authentification admin **n'utilise plus** de Bearer token statique
+> en `sessionStorage`. Depuis le passage aux sessions signées, le login se
+> fait via `POST /api/auth/login` qui pose un cookie `HttpOnly` signé en
+> HMAC (voir `createSessionToken()` / `SESSION_SECRET` dans `worker.js`).
+> Toutes les requêtes admin doivent inclure `credentials: 'include'` pour
+> envoyer ce cookie — il n'y a plus de header `Authorization` à gérer
+> côté client.
 
 ```javascript
-const ADMIN_TOKEN = sessionStorage.getItem('admin_token');
+async function adminLogin(password) {
+  const res = await fetch(`${API}/api/auth/login`, {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error('Mot de passe incorrect');
+}
 
 async function saveEventToAPI(ev) {
   const isNew = !ev.id;
   const url   = isNew ? `${API}/api/events` : `${API}/api/events/${ev.id}`;
   const res   = await fetch(url, {
-    method:  isNew ? 'POST' : 'PUT',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${ADMIN_TOKEN}`,
-    },
-    body: JSON.stringify(ev),
+    method:      isNew ? 'POST' : 'PUT',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify(ev),
   });
   if (!res.ok) throw new Error((await res.json()).error);
   return res.json();
@@ -174,8 +198,8 @@ async function saveEventToAPI(ev) {
 
 async function deleteEventFromAPI(id) {
   await fetch(`${API}/api/events/${id}`, {
-    method:  'DELETE',
-    headers: { 'Authorization': `Bearer ${ADMIN_TOKEN}` },
+    method:      'DELETE',
+    credentials: 'include',
   });
 }
 ```
@@ -206,7 +230,8 @@ Chaque `git push` sur `main` redéploie automatiquement le Worker, réapplique `
 | GET | `/api/archives/:id/csv` | ✅ | Télécharger la liste des inscrits d'une archive (CSV) |
 | DELETE | `/api/archives/:id` | ✅ | Supprimer définitivement une archive |
 
-✅ = Header requis : `Authorization: Bearer <CF_ADMIN_TOKEN>`
+✅ = Nécessite une session admin active (cookie `HttpOnly` posé par
+`POST /api/auth/login`, requêtes envoyées avec `credentials: 'include'`).
 
 ## Archivage automatique des événements passés
 

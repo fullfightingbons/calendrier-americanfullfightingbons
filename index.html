@@ -648,7 +648,7 @@ footer span{color:#888}
       <div class="admin-login-sub">AMERICAN FULL FIGHTING BONS EN CHABLAIS</div>
     </div>
     <div class="admin-login-body">
-      <div class="admin-login-error" id="login-error">Mot de passe incorrect. Réessayez.</div>
+      <div class="admin-login-error" id="login-error">Mot de passe incorrect.</div>
       <div class="form-group">
         <label>Mot de passe administrateur <span class="req">*</span></label>
         <input type="password" id="admin-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdminLogin()">
@@ -1536,11 +1536,21 @@ async function checkAdminLogin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw })
     });
-    if (!r.ok) throw new Error('unauthorized');
+    if (!r.ok) {
+      // Affiche le vrai message renvoyé par l'API (mot de passe incorrect,
+      // rate-limit 429, ou erreur serveur 500 type SESSION_SECRET manquant)
+      // plutôt qu'un "mot de passe incorrect" générique qui masque la cause.
+      const data = await r.json().catch(() => ({}));
+      const msg = data.error || (r.status === 500
+        ? 'Erreur serveur : contactez le développeur (secret Worker manquant ?)'
+        : 'Mot de passe incorrect.');
+      throw new Error(msg);
+    }
     closeAdminLogin();
     openAdminPanel();
   } catch(e) {
     API._token = null;
+    document.getElementById('login-error').textContent = e.message || 'Mot de passe incorrect.';
     document.getElementById('login-error').style.display='block';
     document.getElementById('admin-pw').value='';
     document.getElementById('admin-pw').focus();

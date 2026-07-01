@@ -22,4 +22,7 @@ ENVIRONMENT = "production"
 crons = ["0 3 * * *"]
 
 # ── Secrets (définis via GitHub Secrets, jamais ici) ────────────────────────
-# ADMIN_TOKEN → injecté par le workflow GitHub Actions (printf sans newline)
+# ADMIN_TOKEN    → injecté par le workflow GitHub Actions (printf sans newline)
+# SESSION_SECRET → injecté par le workflow GitHub Actions (32+ caractères).
+#                  Signe le cookie de session admin (HMAC). Sans lui, le
+#                  login échoue toujours (500) même avec le bon ADMIN_TOKEN.
