@@ -15,7 +15,8 @@ votre-repo/
 ├── schema.sql              ← schéma D1 initial (tables de base, + données démo)
 ├── migrations/             ← migrations D1 appliquées via `wrangler d1 migrations apply`
 │   ├── 0002_add_unique_email_event.sql  ← contrainte UNIQUE email+event
-│   └── 0003_add_ferme_status.sql        ← ajout du statut 'ferme'
+│   ├── 0003_add_ferme_status.sql        ← ajout du statut 'ferme'
+│   └── 0004_event_archives.sql          ← table event_archives (archivage à la suppression)
 ├── wrangler.toml           ← configuration Cloudflare
 └── index.html              ← front-end SPA
 ```
