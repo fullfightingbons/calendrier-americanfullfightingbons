@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS events (
   is_grade      INTEGER NOT NULL DEFAULT 0,    -- 0 | 1
   helloasso     INTEGER NOT NULL DEFAULT 0,    -- 0 | 1
   helloasso_url TEXT,
+  poster_key    TEXT,                          -- clé de l'affiche dans R2 (bucket POSTERS), NULL si aucune
   created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
@@ -120,6 +121,29 @@ BEGIN
          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
   WHERE  id = NEW.event_id;
 END;
+
+-- ──────────────────────────────────────────────────────────────
+-- TABLE : admin_credentials
+-- Mot de passe admin modifiable depuis le panneau (onglet Réglages).
+-- Une seule ligne (id=1, imposé par le CHECK). Tant qu'aucune ligne
+-- n'existe, le login retombe sur le secret Cloudflare ADMIN_TOKEN
+-- (comportement historique) — voir la route POST /api/auth/login dans
+-- worker.js. Dès qu'un admin change le mot de passe via le panneau,
+-- cette table devient la seule source de vérité pour le login, et
+-- ADMIN_TOKEN n'est plus utilisé (sauf en secours : supprimer la ligne
+-- via `wrangler d1 execute ... "DELETE FROM admin_credentials"` redonne
+-- accès avec l'ancien ADMIN_TOKEN).
+-- Le mot de passe n'est jamais stocké en clair : PBKDF2-SHA256 salé,
+-- calculé côté Worker avec crypto.subtle (hashPassword/verifyPassword
+-- dans worker.js).
+-- ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_credentials (
+  id            INTEGER PRIMARY KEY CHECK (id = 1),
+  password_hash TEXT    NOT NULL,   -- hex, dérivé PBKDF2-SHA256
+  password_salt TEXT    NOT NULL,   -- hex, sel aléatoire 16 octets
+  iterations    INTEGER NOT NULL DEFAULT 100000,
+  updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 
 -- ──────────────────────────────────────────────────────────────
 -- Pas de données de démonstration ici.

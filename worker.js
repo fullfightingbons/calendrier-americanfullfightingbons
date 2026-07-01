@@ -46,6 +46,130 @@ function secureEquals(left, right) {
   return diff === 0;
 }
 
+// ── Hachage du mot de passe admin (PBKDF2-SHA256 salé) ──────────
+// Utilisé pour le mot de passe stocké en base (table admin_credentials),
+// modifiable depuis le panneau admin. Le secret ADMIN_TOKEN (Cloudflare)
+// ne sert plus que de mot de passe de secours tant qu'aucune ligne
+// n'existe dans admin_credentials — voir la route POST /api/auth/login.
+const PASSWORD_HASH_ITERATIONS = 100000;
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex) {
+  const clean = String(hex || '');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  }
+  return out;
+}
+
+async function derivePasswordHash(password, saltBytes, iterations) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations },
+    keyMaterial,
+    256
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+// Génère un nouveau sel + hash pour un mot de passe en clair.
+async function hashPassword(password, iterations = PASSWORD_HASH_ITERATIONS) {
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await derivePasswordHash(password, saltBytes, iterations);
+  return { hash, salt: bytesToHex(saltBytes), iterations };
+}
+
+// Vérifie un mot de passe en clair contre un hash+sel stockés (hex),
+// en temps constant sur la comparaison finale (secureEquals).
+async function verifyPassword(password, saltHex, hashHex, iterations = PASSWORD_HASH_ITERATIONS) {
+  if (!saltHex || !hashHex) return false;
+  const computed = await derivePasswordHash(password, hexToBytes(saltHex), iterations);
+  return secureEquals(computed, hashHex);
+}
+
+// Charge la ligne unique (id=1) de admin_credentials, ou null si le mot
+// de passe n'a jamais été changé depuis le panneau (fallback ADMIN_TOKEN).
+async function loadAdminCredentials(db) {
+  return db.prepare(
+    'SELECT password_hash, password_salt, iterations FROM admin_credentials WHERE id = 1'
+  ).first();
+}
+
+// Crée ou remplace la ligne unique de admin_credentials.
+async function saveAdminCredentials(db, { hash, salt, iterations }) {
+  await db.prepare(
+    `INSERT INTO admin_credentials (id, password_hash, password_salt, iterations, updated_at)
+     VALUES (1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+     ON CONFLICT(id) DO UPDATE SET
+       password_hash = excluded.password_hash,
+       password_salt = excluded.password_salt,
+       iterations    = excluded.iterations,
+       updated_at    = excluded.updated_at`
+  ).bind(hash, salt, iterations).run();
+}
+
+// ── Stockage R2 — affiches d'événements ──────────────────────────
+// Chaque événement peut avoir une affiche (image) stockée dans le bucket
+// R2 "POSTERS" (binding défini dans wrangler.toml). La clé R2 est stockée
+// dans events.poster_key ; l'image est servie publiquement via la route
+// GET /posters/:key (cf. fetch handler), sans authentification puisque
+// c'est un visuel public du calendrier.
+const POSTER_MAX_BYTES = 8 * 1024 * 1024; // 8 Mo
+const POSTER_ALLOWED_TYPES = {
+  'image/jpeg': 'jpg',
+  'image/png':  'png',
+  'image/webp': 'webp',
+  'image/gif':  'gif',
+};
+
+function posterExtensionFor(contentType) {
+  return POSTER_ALLOWED_TYPES[String(contentType || '').toLowerCase().split(';')[0].trim()] || null;
+}
+
+// Téléverse une nouvelle affiche pour un événement et renvoie la clé R2
+// générée. La clé inclut un horodatage pour invalider le cache navigateur
+// dès qu'une affiche est remplacée (l'ancienne clé doit être supprimée
+// séparément par l'appelant une fois le nouveau poster_key enregistré).
+async function uploadEventPoster(env, eventId, arrayBuffer, contentType) {
+  const ext = posterExtensionFor(contentType);
+  if (!ext) {
+    throw new ApiError("Format d'image non supporté (JPEG, PNG, WebP ou GIF uniquement)");
+  }
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    throw new ApiError('Fichier vide');
+  }
+  if (arrayBuffer.byteLength > POSTER_MAX_BYTES) {
+    throw new ApiError('Image trop volumineuse (8 Mo maximum)');
+  }
+  const key = `${eventId}-${Date.now()}.${ext}`;
+  await env.POSTERS.put(key, arrayBuffer, {
+    httpMetadata: { contentType },
+  });
+  return key;
+}
+
+// Suppression best-effort : un objet déjà absent (ou un bucket
+// momentanément indisponible) ne doit jamais faire échouer la requête
+// appelante (mise à jour/suppression d'événement).
+async function deleteEventPosterKey(env, key) {
+  if (!key || !env.POSTERS) return;
+  try {
+    await env.POSTERS.delete(key);
+  } catch {
+    // ignoré volontairement
+  }
+}
+
 function getAllowedOrigins(env, requestUrl) {
   const configured = String(env.CORS_ALLOWED_ORIGINS || '')
     .split(',')
@@ -172,6 +296,7 @@ function withComputedEventState(event, activeRegistrations) {
     spots_left: spotsLeft,
     status,
     registrations_count: activeRegistrations,
+    poster_url: event?.poster_key ? `/posters/${event.poster_key}` : null,
   };
 }
 
@@ -488,6 +613,8 @@ export {
   validateRegistration,
   isUniqueConstraintError,
   isRateLimited,
+  hashPassword,
+  verifyPassword,
 };
 
 
@@ -602,6 +729,28 @@ export default {
       });
     }
 
+    // ── Affiches d'événements servies depuis R2 ────────────────
+    // Route publique (pas d'auth : ce sont des visuels du calendrier public).
+    // Cache navigateur long car la clé change à chaque remplacement d'affiche
+    // (horodatage dans le nom), donc jamais de contenu périmé servi.
+    if ((method === 'GET' || method === 'HEAD') && path.startsWith('/posters/')) {
+      const key = decodeURIComponent(path.slice('/posters/'.length));
+      if (!key || key.includes('/') || key.includes('..')) {
+        return new Response('Not found', { status: 404 });
+      }
+      const object = await env.POSTERS.get(key);
+      if (!object) {
+        return new Response('Not found', { status: 404 });
+      }
+      return new Response(method === 'HEAD' ? null : object.body, {
+        headers: securityHeaders({
+          'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Content-Length': String(object.size),
+        }),
+      });
+    }
+
     // ── Servir index.html embarqué dans le Worker ─────────────
     if ((method === 'GET' || method === 'HEAD') && (path === '/' || path === '' || path === '/index.html')) {
       return new Response(INDEX_HTML, {
@@ -665,7 +814,18 @@ export default {
           }
           const body = await request.json();
           const password = String(body?.password || '').trim();
-          if (!password || !secureEquals(password, String(env.ADMIN_TOKEN || '').trim())) {
+          if (!password) return err('Mot de passe incorrect', 401);
+
+          // Vérifie d'abord contre le mot de passe stocké en base (modifiable
+          // depuis le panneau Réglages). Si aucune ligne n'existe encore
+          // (aucun changement effectué depuis l'installation), on retombe
+          // sur le secret Cloudflare ADMIN_TOKEN — comportement historique.
+          const stored = await loadAdminCredentials(env.DB);
+          const passwordOk = stored
+            ? await verifyPassword(password, stored.password_salt, stored.password_hash, stored.iterations)
+            : secureEquals(password, String(env.ADMIN_TOKEN || '').trim());
+
+          if (!passwordOk) {
             return err('Mot de passe incorrect', 401);
           }
           const token = await createSessionToken(
@@ -695,6 +855,43 @@ export default {
               'Set-Cookie': clearSessionCookie(),
             }),
           });
+        }
+
+        if (method === 'PUT' && resId === 'password') {
+          await requireAdmin();
+
+          // Même logique de rate limiting que le login : on est déjà admin,
+          // mais ça évite qu'une session volée serve à essayer en boucle un
+          // "mot de passe actuel" pour deviner l'existant.
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(`password-change:${clientIp}`, 5, 5 * 60_000)) {
+            return err('Trop de tentatives. Réessayez dans quelques minutes.', 429);
+          }
+
+          const body = await request.json();
+          const currentPassword = String(body?.currentPassword || '').trim();
+          const newPassword = String(body?.newPassword || '').trim();
+
+          if (!currentPassword || !newPassword) {
+            return err('Mot de passe actuel et nouveau mot de passe requis');
+          }
+          if (newPassword.length < 12) {
+            return err('Le nouveau mot de passe doit contenir au moins 12 caractères');
+          }
+
+          const stored = await loadAdminCredentials(env.DB);
+          const currentOk = stored
+            ? await verifyPassword(currentPassword, stored.password_salt, stored.password_hash, stored.iterations)
+            : secureEquals(currentPassword, String(env.ADMIN_TOKEN || '').trim());
+
+          if (!currentOk) {
+            return err('Mot de passe actuel incorrect', 401);
+          }
+
+          const { hash, salt, iterations } = await hashPassword(newPassword);
+          await saveAdminCredentials(env.DB, { hash, salt, iterations });
+
+          return json({ ok: true });
         }
       }
 
@@ -745,7 +942,7 @@ export default {
           return json(created, 201);
         }
 
-        if (method === 'PUT' && resId) {
+        if (method === 'PUT' && resId && !subRes) {
           await requireAdmin();
           const body = await request.json();
           validateEvent(body);
@@ -771,13 +968,56 @@ export default {
           return json(updated);
         }
 
-        if (method === 'DELETE' && resId) {
+        // PUT /api/events/:id/poster [admin] — téléverse/remplace l'affiche.
+        // Corps de requête = octets bruts de l'image, Content-Type = mime réel
+        // (le client envoie directement le File sélectionné, pas de multipart).
+        if (method === 'PUT' && resId && subRes === 'poster') {
+          await requireAdmin();
+          const existing = await env.DB.prepare('SELECT poster_key FROM events WHERE id = ?').bind(resId).first();
+          if (!existing) return err('Événement introuvable', 404);
+
+          const contentType = request.headers.get('Content-Type') || '';
+          const arrayBuffer = await request.arrayBuffer();
+          const newKey = await uploadEventPoster(env, resId, arrayBuffer, contentType);
+
+          await env.DB.prepare(
+            `UPDATE events SET poster_key = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`
+          ).bind(newKey, resId).run();
+
+          // Supprime l'ancienne affiche seulement après succès de l'upload +
+          // écriture DB, pour ne jamais perdre l'ancienne image si une étape
+          // précédente échoue.
+          if (existing.poster_key) await deleteEventPosterKey(env, existing.poster_key);
+
+          return json({ poster_url: `/posters/${newKey}` });
+        }
+
+        // DELETE /api/events/:id/poster [admin] — retire l'affiche (sans
+        // supprimer l'événement lui-même).
+        if (method === 'DELETE' && resId && subRes === 'poster') {
+          await requireAdmin();
+          const existing = await env.DB.prepare('SELECT poster_key FROM events WHERE id = ?').bind(resId).first();
+          if (!existing) return err('Événement introuvable', 404);
+          if (existing.poster_key) {
+            await deleteEventPosterKey(env, existing.poster_key);
+            await env.DB.prepare(
+              `UPDATE events SET poster_key = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`
+            ).bind(resId).run();
+          }
+          return json({ ok: true });
+        }
+
+        if (method === 'DELETE' && resId && !subRes) {
           await requireAdmin();
           // Archivage automatique des inscriptions avant suppression (cf.
           // archiveAndDeleteEvent ci-dessus) — même logique que le cron
           // purgeExpiredEvents, déclenchée ici manuellement par l'admin.
+          // L'affiche R2 éventuelle est aussi supprimée pour ne pas laisser
+          // de fichier orphelin dans le bucket.
+          const existing = await env.DB.prepare('SELECT poster_key FROM events WHERE id = ?').bind(resId).first();
           const result = await archiveAndDeleteEvent(env.DB, resId);
           if (!result) return err('Événement introuvable', 404);
+          if (existing?.poster_key) await deleteEventPosterKey(env, existing.poster_key);
           return json({ deleted: resId, archived_registrations: result.archived_registrations });
         }
       }

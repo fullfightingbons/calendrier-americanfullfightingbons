@@ -100,6 +100,7 @@ header{background:var(--dark);color:var(--white);padding:0 2rem}
 .event-card{background:white;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s}
 .event-card:hover{transform:translateY(-3px);border-color:#bbb;box-shadow:0 8px 24px rgba(0,0,0,.08)}
 .event-card.featured{border-color:var(--red);border-width:2px}
+.card-poster{width:100%;height:160px;object-fit:cover;display:block;background:#f2f2f2}
 .card-badge-row{padding:14px 16px 0;display:flex;align-items:center;justify-content:space-between}
 .badge{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:20px}
 .badge-stage{background:#EBF5FB;color:#1A5276}
@@ -217,6 +218,10 @@ footer span{color:#888}
 .admin-event-row:hover{box-shadow:0 4px 16px rgba(0,0,0,.07)}
 .admin-event-row.sold-out{opacity:.6}
 .admin-event-color{width:4px;height:52px;border-radius:4px;flex-shrink:0}
+.admin-event-thumb{width:44px;height:52px;border-radius:6px;flex-shrink:0;object-fit:cover;background:#eee}
+.ae-poster-preview{width:100%;max-height:180px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:#f7f7f7;display:block;margin-bottom:10px}
+.ae-poster-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ae-poster-hint{font-size:12px;color:var(--muted);margin-top:6px}
 .admin-event-info{flex:1;min-width:0}
 .admin-event-name{font-family:var(--font-display);font-size:18px;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .admin-event-meta{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -679,6 +684,7 @@ footer span{color:#888}
         <button class="admin-tab active" onclick="switchAdminTab('events',this)">📅 Événements</button>
         <button class="admin-tab" onclick="switchAdminTab('registrations',this)">👥 Inscriptions</button>
         <button class="admin-tab" onclick="switchAdminTab('archives',this)">🗄 Archives</button>
+        <button class="admin-tab" onclick="switchAdminTab('settings',this)">⚙ Réglages</button>
       </div>
 
       <!-- ── Onglet Événements ── -->
@@ -744,6 +750,29 @@ footer span{color:#888}
           <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
         </div>
       </div>
+
+      <!-- ── Onglet Réglages ── -->
+      <div class="admin-tab-content" id="tab-settings">
+        <div class="admin-section-title">RÉGLAGES</div>
+        <div class="admin-section-sub">Modifiez le mot de passe administrateur utilisé pour accéder à ce panneau.</div>
+        <div style="max-width:420px">
+          <div class="admin-login-error" id="settings-pw-error" style="display:none"></div>
+          <div id="settings-pw-success" style="display:none;background:#EAFAF1;border:1px solid #A9DFBF;border-radius:6px;padding:10px 14px;font-size:13px;color:#1E8449;margin-bottom:1rem">✅ Mot de passe mis à jour.</div>
+          <div class="form-group">
+            <label>Mot de passe actuel <span class="req">*</span></label>
+            <input type="password" id="settings-pw-current" placeholder="••••••••" autocomplete="current-password">
+          </div>
+          <div class="form-group">
+            <label>Nouveau mot de passe <span class="req">*</span></label>
+            <input type="password" id="settings-pw-new" placeholder="12 caractères minimum" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label>Confirmer le nouveau mot de passe <span class="req">*</span></label>
+            <input type="password" id="settings-pw-confirm" placeholder="••••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter')changeAdminPassword()">
+          </div>
+          <button class="btn-add-event" onclick="changeAdminPassword()" id="settings-pw-submit">Changer le mot de passe</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -758,6 +787,15 @@ footer span{color:#888}
     <div class="admin-modal-body">
       <input type="hidden" id="ae-id">
       <div class="admin-form-section">Informations générales</div>
+      <div class="form-group">
+        <label>Affiche de l'événement</label>
+        <img id="ae-poster-preview" class="ae-poster-preview" style="display:none">
+        <div class="ae-poster-actions">
+          <input type="file" id="ae-poster-file" accept="image/jpeg,image/png,image/webp,image/gif" onchange="onPosterFileSelected(event)">
+          <button type="button" class="admin-btn-del" id="ae-poster-remove" style="display:none" onclick="removeEventPoster()">🗑 Retirer l'affiche</button>
+        </div>
+        <div class="ae-poster-hint">JPEG, PNG, WebP ou GIF — 8 Mo maximum. Enregistrée à la sauvegarde de l'événement.</div>
+      </div>
       <div class="form-group">
         <label>Titre de l'événement <span class="req">*</span></label>
         <input type="text" id="ae-title" placeholder="Ex : Stage Été — Frappe & Déplacement">
@@ -946,6 +984,19 @@ const API = {
       method: 'DELETE',
       credentials: 'include',
       headers: { ...API._adminHeaders() }
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    return r.json();
+  },
+
+  // Téléverse un fichier brut (ex : affiche d'événement) — pas de JSON,
+  // le corps de la requête est directement les octets du fichier.
+  async adminPutFile(path, file) {
+    const r = await fetch(CONFIG.API_URL + path, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', ...API._adminHeaders() },
+      body: file
     });
     if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     return r.json();
@@ -1217,6 +1268,7 @@ function normalizeEvent(ev) {
     price:      ev.price,
     spots:      ev.spots_left,  spotsTotal: ev.spots_total,
     featured:   !!ev.featured,  isGrade:    !!ev.is_grade,
+    posterUrl:  ev.poster_url || null,
   };
 }
 
@@ -1591,6 +1643,53 @@ function switchAdminTab(tab, btn) {
 }
 
 /* ════════════════════════════════════════════════════
+   ADMIN — RÉGLAGES (changement de mot de passe)
+   ════════════════════════════════════════════════════ */
+async function changeAdminPassword() {
+  const errorEl   = document.getElementById('settings-pw-error');
+  const successEl = document.getElementById('settings-pw-success');
+  const submitBtn = document.getElementById('settings-pw-submit');
+  const current   = document.getElementById('settings-pw-current').value;
+  const next      = document.getElementById('settings-pw-new').value;
+  const confirm   = document.getElementById('settings-pw-confirm').value;
+
+  errorEl.style.display = 'none';
+  successEl.style.display = 'none';
+
+  if (!current || !next || !confirm) {
+    errorEl.textContent = 'Merci de remplir les trois champs.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (next.length < 12) {
+    errorEl.textContent = 'Le nouveau mot de passe doit contenir au moins 12 caractères.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (next !== confirm) {
+    errorEl.textContent = 'La confirmation ne correspond pas au nouveau mot de passe.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Changement en cours…';
+  try {
+    await API.adminPut('/api/auth/password', { currentPassword: current, newPassword: next });
+    document.getElementById('settings-pw-current').value = '';
+    document.getElementById('settings-pw-new').value = '';
+    document.getElementById('settings-pw-confirm').value = '';
+    successEl.style.display = 'block';
+  } catch (e) {
+    errorEl.textContent = e.message || 'Erreur lors du changement de mot de passe.';
+    errorEl.style.display = 'block';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Changer le mot de passe';
+  }
+}
+
+/* ════════════════════════════════════════════════════
    ADMIN — INSCRIPTIONS
    ════════════════════════════════════════════════════ */
 let currentRegs = [];
@@ -1936,7 +2035,9 @@ function renderAdminList() {
     const priceTxt  =ev.price===0?'Gratuit':'€'+ev.price;
     const rowClass  =ev.status==='complet'?' sold-out':ev.status==='ferme'?' sold-out':'';
     return `<div class="admin-event-row${rowClass}">
-      <div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>
+      ${ev.posterUrl
+        ? `<img class="admin-event-thumb" src="${CONFIG.API_URL+ev.posterUrl}" alt="">`
+        : `<div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>`}
       <div class="admin-event-info">
         <div class="admin-event-name">${escapeHtml(ev.title)}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}</div>
         <div class="admin-event-meta">${escapeHtml(typeLabels[ev.type]||ev.type)} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${escapeHtml(ev.lieu)}</div>
@@ -1952,6 +2053,43 @@ function renderAdminList() {
   }).join('');
 }
 
+/* ── Affiche d'événement ────────────────────────────── */
+let selectedPosterFile = null; // File choisi, pas encore envoyé
+let posterRemoved      = false; // true = l'affiche existante doit être supprimée à la sauvegarde
+let currentPosterUrl   = null; // affiche déjà enregistrée pour l'événement en cours d'édition
+
+const POSTER_MAX_BYTES_CLIENT = 8 * 1024 * 1024;
+
+function onPosterFileSelected(evt) {
+  const file = evt.target.files && evt.target.files[0];
+  if (!file) return;
+  if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) {
+    alert('Format non supporté. Utilisez JPEG, PNG, WebP ou GIF.');
+    evt.target.value = '';
+    return;
+  }
+  if (file.size > POSTER_MAX_BYTES_CLIENT) {
+    alert('Image trop volumineuse (8 Mo maximum).');
+    evt.target.value = '';
+    return;
+  }
+  selectedPosterFile = file;
+  posterRemoved = false;
+  const preview = document.getElementById('ae-poster-preview');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+  document.getElementById('ae-poster-remove').style.display = 'inline-block';
+}
+
+function removeEventPoster() {
+  selectedPosterFile = null;
+  posterRemoved = !!currentPosterUrl; // seulement pertinent s'il y avait déjà une affiche enregistrée
+  document.getElementById('ae-poster-file').value = '';
+  document.getElementById('ae-poster-preview').style.display = 'none';
+  document.getElementById('ae-poster-preview').src = '';
+  document.getElementById('ae-poster-remove').style.display = 'none';
+}
+
 function openEventForm(id) {
   const isNew=!id;
   document.getElementById('admin-modal-title').textContent=isNew?'NOUVEL ÉVÉNEMENT':'MODIFIER L\'ÉVÉNEMENT';
@@ -1964,6 +2102,15 @@ function openEventForm(id) {
   document.querySelectorAll('#ae-type-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
   document.querySelector('#ae-status-group [data-val="disponible"]').classList.add('active');
+
+  // ── Affiche : réinitialisation systématique avant pré-remplissage ──
+  selectedPosterFile = null;
+  posterRemoved      = false;
+  currentPosterUrl   = null;
+  document.getElementById('ae-poster-file').value = '';
+  document.getElementById('ae-poster-preview').style.display = 'none';
+  document.getElementById('ae-poster-preview').src = '';
+  document.getElementById('ae-poster-remove').style.display = 'none';
 
   if (!isNew) {
     const ev=adminEvents.find(e=>e.id===id);
@@ -1984,6 +2131,14 @@ function openEventForm(id) {
     document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
     const stBtn=document.querySelector(`#ae-status-group [data-val="${ev.status}"]`);
     if (stBtn) stBtn.classList.add('active');
+
+    if (ev.posterUrl) {
+      currentPosterUrl = ev.posterUrl;
+      const preview = document.getElementById('ae-poster-preview');
+      preview.src = CONFIG.API_URL + ev.posterUrl;
+      preview.style.display = 'block';
+      document.getElementById('ae-poster-remove').style.display = 'inline-block';
+    }
   }
   document.getElementById('admin-event-modal').classList.add('open');
 }
@@ -2031,6 +2186,21 @@ async function saveEvent() {
     let saved;
     if (existingId) saved=await API.adminPut('/api/events/'+existingId,payload);
     else            saved=await API.adminPost('/api/events',payload);
+
+    // ── Affiche : envoyée séparément (upload binaire), une fois l'ID connu ──
+    const eventId = saved.id;
+    try {
+      if (selectedPosterFile) {
+        const posterResult = await API.adminPutFile('/api/events/'+eventId+'/poster', selectedPosterFile);
+        saved.poster_url = posterResult.poster_url;
+      } else if (posterRemoved) {
+        await API.adminDelete('/api/events/'+eventId+'/poster');
+        saved.poster_url = null;
+      }
+    } catch (posterErr) {
+      alert("L'événement a été enregistré, mais l'affiche n'a pas pu être envoyée : "+posterErr.message);
+    }
+
     const norm=normalizeEvent(saved);
     const idx =adminEvents.findIndex(e=>e.id===norm.id);
     if (idx>=0) adminEvents[idx]=norm; else adminEvents.push(norm);
@@ -2161,6 +2331,7 @@ function buildCard(ev) {
     ? `<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${ev.timeStart} – ${ev.timeEnd}</div>`
     : '';
   return `<div class="event-card${featured}" data-type="${ev.type}${ev.price===0?' gratuit':''}"${clickCard}${opacity}>
+    ${ev.posterUrl ? `<img class="card-poster" src="${CONFIG.API_URL+ev.posterUrl}" alt="${escapeHtml(ev.title)}" loading="lazy">` : ''}
     <div class="card-badge-row">${typeBadge}<span class="card-spots ${spotsClass}">${spotsTxt}</span></div>
     <div class="card-body">
       <div class="card-title">${escapeHtml(ev.title)}</div>

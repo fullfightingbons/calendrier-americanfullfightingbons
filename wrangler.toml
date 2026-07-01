@@ -9,6 +9,14 @@ binding        = "DB"
 database_name  = "calendrier-americanfullfightingbonsdb"
 database_id    = "b146bb47-b1cc-48db-9e7c-0c8223a9fee2"
 
+# ── Stockage R2 — affiches d'événements ──────────────────────────────────────
+# Bucket à créer une seule fois avant le premier déploiement avec cette
+# fonctionnalité :
+#   wrangler r2 bucket create affbc-calendrier-posters
+[[r2_buckets]]
+binding      = "POSTERS"
+bucket_name  = "affbc-calendrier-posters"
+
 # ── Variables d'environnement non-sensibles ──────────────────────────────────
 [vars]
 ENVIRONMENT = "production"
