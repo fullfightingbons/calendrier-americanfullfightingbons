@@ -6,6 +6,7 @@
  */
 
 import INDEX_HTML from './index.html';
+import MENTIONS_HTML from './mentions-legales.html';
 
 // Logo compressé (WebP, ~24 Ko) — servi via la route /logo.webp ci-dessous.
 // Remplace l'ancien Logo.jpg (2,6 Mo) hot-linké depuis raw.githubusercontent.com.
@@ -754,6 +755,16 @@ export default {
     // ── Servir index.html embarqué dans le Worker ─────────────
     if ((method === 'GET' || method === 'HEAD') && (path === '/' || path === '' || path === '/index.html')) {
       return new Response(INDEX_HTML, {
+        status: 200,
+        headers: securityHeaders({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'public, max-age=300',
+        }),
+      });
+    }
+
+    if ((method === 'GET' || method === 'HEAD') && path === '/mentions-legales') {
+      return new Response(MENTIONS_HTML, {
         status: 200,
         headers: securityHeaders({
           'Content-Type': 'text/html; charset=utf-8',
