@@ -820,13 +820,18 @@ async function purgeExpiredEvents(env) {
 
 // Une inscription "en_attente" liée à un checkout HelloAsso (helloasso_ref
 // renseigné) et vieille de plus de 2h est considérée comme un paiement
-// abandonné : l'utilisateur a quitté HelloAsso sans payer, ou n'est jamais
-// revenu. On la marque "annule" pour libérer la place plutôt que de la
-// bloquer indéfiniment (cf. correctif checkout : la création a désormais
-// lieu avant le paiement, donc ce nettoyage devient nécessaire).
+// potentiellement abandonné : l'utilisateur a quitté HelloAsso sans payer,
+// ou n'est jamais revenu (callback /api/checkout/callback jamais atteint —
+// fermeture du navigateur, coupure réseau, etc.). Avant d'annuler quoi que
+// ce soit, on revérifie chaque cas auprès de l'API HelloAsso : un callback
+// manqué ne veut pas dire un paiement manqué, et annuler une inscription
+// réellement payée reviendrait à encaisser le paiement d'un adhérent tout
+// en libérant sa place à quelqu'un d'autre. Si HelloAsso confirme le
+// paiement, on rattrape l'inscription en "paye" (et on envoie l'email de
+// confirmation resté bloqué) plutôt que de l'annuler.
 async function purgeAbandonedCheckouts(env) {
   const { results } = await env.DB.prepare(`
-    SELECT id, event_id FROM registrations
+    SELECT * FROM registrations
     WHERE paiement_status = 'en_attente'
       AND helloasso_ref IS NOT NULL
       AND created_at < datetime('now', '-2 hours')
@@ -834,14 +839,41 @@ async function purgeAbandonedCheckouts(env) {
   if (!results || results.length === 0) return;
 
   const eventIds = new Set();
-  for (const row of results) {
-    await env.DB.prepare(`UPDATE registrations SET paiement_status = 'annule' WHERE id = ?`).bind(row.id).run();
-    eventIds.add(row.event_id);
+  let cancelled = 0;
+  let recovered = 0;
+  for (const reg of results) {
+    let paid = false;
+    try {
+      const intent = await getHelloAssoCheckoutIntent(env, reg.helloasso_ref);
+      paid = buildHelloAssoPaymentState(intent, reg.montant).paid;
+    } catch (verifyError) {
+      // Vérification impossible (HelloAsso indisponible, etc.) : par
+      // prudence on NE marque PAS "annule" ce passage — on retentera au
+      // prochain cron plutôt que de risquer d'annuler un paiement réel.
+      console.error(`[cron] purgeAbandonedCheckouts: vérification HelloAsso échouée pour #${reg.id}`, verifyError);
+      continue;
+    }
+
+    if (paid) {
+      await env.DB.prepare(`UPDATE registrations SET paiement_status = 'paye' WHERE id = ?`).bind(reg.id).run();
+      recovered++;
+      try {
+        const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(reg.event_id).first();
+        const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
+        if (ev) await sendConfirmationEmails(env, { reg: { ...reg, paiement_status: 'paye' }, ev });
+      } catch (emailError) {
+        console.error(`[cron] purgeAbandonedCheckouts: email de confirmation rattrapée échoué pour #${reg.id}`, emailError);
+      }
+    } else {
+      await env.DB.prepare(`UPDATE registrations SET paiement_status = 'annule' WHERE id = ?`).bind(reg.id).run();
+      cancelled++;
+    }
+    eventIds.add(reg.event_id);
   }
   for (const eventId of eventIds) {
     await syncEventAvailability(env.DB, eventId);
   }
-  console.log(`[cron] purgeAbandonedCheckouts: ${results.length} inscription(s) en attente expirée(s) annulée(s)`);
+  console.log(`[cron] purgeAbandonedCheckouts: ${cancelled} annulée(s), ${recovered} rattrapée(s) comme payée(s) sur ${results.length} vérifiée(s)`);
 }
 
 export default {
