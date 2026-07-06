@@ -407,6 +407,106 @@ function isUniqueConstraintError(error, indexName) {
     || (indexName && message.includes(indexName));
 }
 
+// Crée une ligne d'inscription (utilisé à la fois par POST /api/registrations
+// et par POST /api/checkout, qui doit désormais créer l'inscription — statut
+// "en_attente" — *avant* de rediriger vers HelloAsso, plutôt qu'après le
+// retour de paiement. cf. correctif : on ne peut pas faire confiance à un
+// retour de redirection navigateur pour savoir si un paiement a réellement
+// eu lieu, donc la création ne doit pas en dépendre.
+//
+// Retourne { ok:true, id, ev, paiementStatus, normalizedEmail, bodyUsed } ou
+// { ok:false, existing_id, paiement_status, montant } en cas de doublon.
+// Lève une ApiError pour tout autre cas (événement introuvable/complet/fermé).
+async function createRegistrationRow(env, body) {
+  validateRegistration(body);
+  const normalizedEmail = String(body.email || '').toLowerCase().trim();
+  const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
+  const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
+  if (!ev)                     throw new ApiError('Événement introuvable', 404);
+  if (ev.status === 'complet') throw new ApiError('Événement complet', 409);
+  if (ev.status === 'ferme')   throw new ApiError('Les inscriptions sont fermées pour cet événement', 409);
+  if (ev.spots_left <= 0)      throw new ApiError('Plus de places disponibles', 409);
+
+  // Vérifier qu'il n'existe pas déjà une inscription pour cet email + cet événement
+  const existing = await env.DB.prepare(
+    `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+  ).bind(body.event_id, normalizedEmail).first();
+  if (existing) {
+    return { ok: false, existing_id: existing.id, paiement_status: existing.paiement_status, montant: existing.montant };
+  }
+
+  const paiementStatus = ev.price === 0 ? 'gratuit' : 'en_attente';
+
+  let info;
+  try {
+    // INSERT...SELECT...WHERE : l'ensemble (comptage des places + insertion)
+    // est exécuté comme une seule instruction SQL atomique côté D1, ce qui
+    // élimine la race condition TOCTOU du contrôle ev.spots_left<=0 fait
+    // juste au-dessus (deux requêtes simultanées sur la toute dernière place
+    // pourraient sinon passer ce contrôle avant qu'aucune n'ait encore écrit
+    // en base, et surbooker l'événement). Si la sous-requête WHERE est fausse
+    // au moment de l'exécution réelle de l'INSERT, aucune ligne n'est insérée
+    // (info.meta.changes === 0), ce qu'on détecte juste après.
+    info = await env.DB.prepare(`
+      INSERT INTO registrations (
+        event_id, nom, prenom, date_naissance, telephone, email,
+        licence_ffk, is_mineur, categorie, niveau, regime,
+        ceinture_actuelle, ceinture_visee,
+        parent_nom, parent_prenom, parent_tel,
+        message, certif_medical, droit_image, reglement_ok,
+        montant, paiement_status, helloasso_ref
+      )
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+      WHERE (
+        SELECT COUNT(*) FROM registrations r
+        WHERE r.event_id = ? AND r.paiement_status IN ('en_attente', 'paye', 'gratuit')
+      ) < (SELECT spots_total FROM events WHERE id = ?)
+    `).bind(
+      body.event_id, body.nom, body.prenom, body.date_naissance,
+      body.telephone, normalizedEmail,
+      body.licence_ffk       ?? null, body.is_mineur ? 1 : 0,
+      body.categorie         ?? null, body.niveau    ?? null, body.regime ?? null,
+      body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
+      body.parent_nom        ?? null, body.parent_prenom  ?? null, body.parent_tel ?? null,
+      body.message           ?? null,
+      body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
+      ev.price, paiementStatus, body.helloasso_ref ?? null,
+      body.event_id, body.event_id,
+    ).run();
+  } catch (insertError) {
+    if (!isUniqueConstraintError(insertError, 'idx_reg_unique_email_event')) {
+      throw insertError;
+    }
+    const concurrent = await env.DB.prepare(
+      `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
+    ).bind(body.event_id, normalizedEmail).first();
+    return {
+      ok: false,
+      existing_id: concurrent?.id ?? null,
+      paiement_status: concurrent?.paiement_status ?? paiementStatus,
+      montant: concurrent?.montant ?? ev.price,
+    };
+  }
+
+  if (info.meta.changes === 0) {
+    // La sous-requête WHERE a empêché l'insertion : plus de place au moment
+    // exact de l'écriture, alors que le contrôle initial l'avait laissé passer.
+    await syncEventAvailability(env.DB, body.event_id);
+    throw new ApiError('Plus de places disponibles', 409);
+  }
+
+  await syncEventAvailability(env.DB, body.event_id);
+
+  return {
+    ok: true,
+    id: info.meta.last_row_id,
+    ev,
+    paiementStatus,
+    normalizedEmail,
+    bodyUsed: body,
+  };
+}
+
 // ── HelloAsso OAuth2 ───────────────────────────────────────────
 async function getHelloAssoToken(env) {
   const resp = await fetch('https://api.helloasso.com/oauth2/token', {
@@ -451,7 +551,43 @@ async function createHelloAssoCheckout(env, { eventTitle, amount, email, prenom,
     throw new ApiError('Erreur HelloAsso : ' + detail, 502);
   }
   const data = await resp.json();
-  return data.redirectUrl;
+  return { redirectUrl: data.redirectUrl, checkoutIntentId: data.id };
+}
+
+// ── Vérification server-to-server du paiement (même logique que
+// boutique/src/helloasso-helpers.mjs::buildHelloAssoPaymentState — ne jamais
+// faire confiance à un simple retour de redirection navigateur pour valider
+// un paiement : on interroge l'API HelloAsso pour connaître le montant
+// réellement encaissé avant de marquer une inscription "payée"). ──
+function buildHelloAssoPaymentState(intent, expectedAmount) {
+  const order = intent?.order || null;
+  const payments = Array.isArray(order?.payments) ? order.payments.filter(Boolean) : [];
+  const toCents = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Number.isInteger(n) ? n : Math.round(n * 100);
+  };
+  const paidAmountCents = payments.reduce((sum, p) => sum + toCents(p?.amount), 0);
+  const expectedCents = Math.round(Number(expectedAmount || 0) * 100);
+  const hasPayment = payments.length > 0 && paidAmountCents > 0;
+  const paid = hasPayment && (expectedCents <= 0 || paidAmountCents >= expectedCents);
+  return { paid, paidAmountCents };
+}
+
+async function getHelloAssoCheckoutIntent(env, checkoutIntentId) {
+  if (!checkoutIntentId) throw new ApiError('Checkout intent HelloAsso manquant', 400);
+  const token = await getHelloAssoToken(env);
+  const resp = await fetch(
+    `https://api.helloasso.com/v5/organizations/${env.HELLOASSO_ORG_SLUG}/checkout-intents/${encodeURIComponent(String(checkoutIntentId))}`,
+    { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } }
+  );
+  const text = await resp.text().catch(() => '');
+  let payload = null;
+  try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
+  if (!resp.ok) {
+    throw new ApiError(payload?.message || payload?.error || `Erreur vérification HelloAsso (${resp.status})`, 502);
+  }
+  return payload;
 }
 
 // ── Brevo — envoi d'email ──────────────────────────────────────
@@ -616,6 +752,7 @@ export {
   isRateLimited,
   hashPassword,
   verifyPassword,
+  buildHelloAssoPaymentState,
 };
 
 
@@ -681,10 +818,37 @@ async function purgeExpiredEvents(env) {
   console.log(`[cron] purgeExpiredEvents: ${archivedEvents} événement(s) archivé(s) puis supprimé(s), ${archivedRegistrations} inscription(s) archivée(s)`);
 }
 
+// Une inscription "en_attente" liée à un checkout HelloAsso (helloasso_ref
+// renseigné) et vieille de plus de 2h est considérée comme un paiement
+// abandonné : l'utilisateur a quitté HelloAsso sans payer, ou n'est jamais
+// revenu. On la marque "annule" pour libérer la place plutôt que de la
+// bloquer indéfiniment (cf. correctif checkout : la création a désormais
+// lieu avant le paiement, donc ce nettoyage devient nécessaire).
+async function purgeAbandonedCheckouts(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT id, event_id FROM registrations
+    WHERE paiement_status = 'en_attente'
+      AND helloasso_ref IS NOT NULL
+      AND created_at < datetime('now', '-2 hours')
+  `).all();
+  if (!results || results.length === 0) return;
+
+  const eventIds = new Set();
+  for (const row of results) {
+    await env.DB.prepare(`UPDATE registrations SET paiement_status = 'annule' WHERE id = ?`).bind(row.id).run();
+    eventIds.add(row.event_id);
+  }
+  for (const eventId of eventIds) {
+    await syncEventAvailability(env.DB, eventId);
+  }
+  console.log(`[cron] purgeAbandonedCheckouts: ${results.length} inscription(s) en attente expirée(s) annulée(s)`);
+}
+
 export default {
   // ── Cron trigger quotidien (cf. [triggers] crons dans wrangler.toml) ──
   async scheduled(_event, env, _ctx) {
     await purgeExpiredEvents(env);
+    await purgeAbandonedCheckouts(env);
   },
 
   async fetch(request, env) {
@@ -1149,113 +1313,38 @@ export default {
           }
 
           const body = await request.json();
-          validateRegistration(body);
-          const normalizedEmail = String(body.email || '').toLowerCase().trim();
-          const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
-          const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
-          if (!ev)                     return err('Événement introuvable', 404);
-          if (ev.status === 'complet') return err('Événement complet', 409);
-          if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
-          if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
-
-          // Vérifier qu'il n'existe pas déjà une inscription pour cet email + cet événement
-          const existing = await env.DB.prepare(
-            `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
-          ).bind(body.event_id, normalizedEmail).first();
-          if (existing) {
+          const result = await createRegistrationRow(env, body);
+          if (!result.ok) {
             return json({
               error: 'Une inscription existe déjà pour cet email à cet événement.',
               code: 'duplicate_registration',
-              existing_id: existing.id,
-              paiement_status: existing.paiement_status,
-              montant: existing.montant,
+              existing_id: result.existing_id,
+              paiement_status: result.paiement_status,
+              montant: result.montant,
             }, 409);
           }
 
-          const paiementStatus = ev.price === 0
-            ? 'gratuit'
-            : 'en_attente';
-
-          let info;
-          try {
-            // INSERT...SELECT...WHERE : l'ensemble (comptage des places + insertion)
-            // est exécuté comme une seule instruction SQL atomique côté D1, ce qui
-            // élimine la race condition TOCTOU du contrôle ev.spots_left<=0 fait
-            // juste au-dessus (deux requêtes simultanées sur la toute dernière place
-            // pourraient sinon passer ce contrôle avant qu'aucune n'ait encore écrit
-            // en base, et surbooker l'événement). Si la sous-requête WHERE est fausse
-            // au moment de l'exécution réelle de l'INSERT, aucune ligne n'est insérée
-            // (info.meta.changes === 0), ce qu'on détecte juste après.
-            info = await env.DB.prepare(`
-              INSERT INTO registrations (
-                event_id, nom, prenom, date_naissance, telephone, email,
-                licence_ffk, is_mineur, categorie, niveau, regime,
-                ceinture_actuelle, ceinture_visee,
-                parent_nom, parent_prenom, parent_tel,
-                message, certif_medical, droit_image, reglement_ok,
-                montant, paiement_status, helloasso_ref
-              )
-              SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-              WHERE (
-                SELECT COUNT(*) FROM registrations r
-                WHERE r.event_id = ? AND r.paiement_status IN ('en_attente', 'paye', 'gratuit')
-              ) < (SELECT spots_total FROM events WHERE id = ?)
-            `).bind(
-              body.event_id, body.nom, body.prenom, body.date_naissance,
-              body.telephone, normalizedEmail,
-              body.licence_ffk       ?? null, body.is_mineur ? 1 : 0,
-              body.categorie         ?? null, body.niveau    ?? null, body.regime ?? null,
-              body.ceinture_actuelle ?? null, body.ceinture_visee ?? null,
-              body.parent_nom        ?? null, body.parent_prenom  ?? null, body.parent_tel ?? null,
-              body.message           ?? null,
-              body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
-              ev.price, paiementStatus, body.helloasso_ref ?? null,
-              body.event_id, body.event_id,
-            ).run();
-          } catch (insertError) {
-            if (!isUniqueConstraintError(insertError, 'idx_reg_unique_email_event')) {
-              throw insertError;
-            }
-            const concurrent = await env.DB.prepare(
-              `SELECT id, paiement_status, montant FROM registrations WHERE event_id = ? AND email = ? AND paiement_status != 'annule'`
-            ).bind(body.event_id, normalizedEmail).first();
-            return json({
-              error: 'Une inscription existe déjà pour cet email à cet événement.',
-              code: 'duplicate_registration',
-              existing_id: concurrent?.id ?? null,
-              paiement_status: concurrent?.paiement_status ?? paiementStatus,
-              montant: concurrent?.montant ?? ev.price,
-            }, 409);
-          }
-
-          if (info.meta.changes === 0) {
-            // La sous-requête WHERE a empêché l'insertion : plus de place au moment
-            // exact de l'écriture, alors que le contrôle initial l'avait laissé passer.
-            await syncEventAvailability(env.DB, body.event_id);
-            return err('Plus de places disponibles', 409);
-          }
-
-          await syncEventAvailability(env.DB, body.event_id);
-
+          const { id, ev, paiementStatus, normalizedEmail, bodyUsed } = result;
           const regData = {
-            nom: body.nom, prenom: body.prenom, email: normalizedEmail,
-            telephone: body.telephone, date_naissance: body.date_naissance,
-            categorie: body.categorie ?? null, niveau: body.niveau ?? null,
-            licence_ffk: body.licence_ffk ?? null, message: body.message ?? null,
-            is_mineur: body.is_mineur ? 1 : 0,
-            parent_nom: body.parent_nom ?? null, parent_prenom: body.parent_prenom ?? null, parent_tel: body.parent_tel ?? null,
+            nom: bodyUsed.nom, prenom: bodyUsed.prenom, email: normalizedEmail,
+            telephone: bodyUsed.telephone, date_naissance: bodyUsed.date_naissance,
+            categorie: bodyUsed.categorie ?? null, niveau: bodyUsed.niveau ?? null,
+            licence_ffk: bodyUsed.licence_ffk ?? null, message: bodyUsed.message ?? null,
+            is_mineur: bodyUsed.is_mineur ? 1 : 0,
+            parent_nom: bodyUsed.parent_nom ?? null, parent_prenom: bodyUsed.parent_prenom ?? null, parent_tel: bodyUsed.parent_tel ?? null,
             paiement_status: paiementStatus,
           };
           const emailResults = await sendConfirmationEmails(env, { reg: regData, ev });
           return json({
-            id: info.meta.last_row_id,
-            event_id: body.event_id,
+            id,
+            event_id: bodyUsed.event_id,
             paiement_status: paiementStatus,
             montant: ev.price,
             emails: emailResults,
           }, 201);
-          } 
-          
+        }
+
+
         // PUT /api/registrations/:id/status [admin]
         if (method === 'PUT' && resId && subRes === 'status') {
           await requireAdmin();
@@ -1300,31 +1389,125 @@ export default {
       // ══════════════════════════════════════════════════════════
       //  CHECKOUT HELLOASSO
       // ══════════════════════════════════════════════════════════
+      //
+      // L'inscription est créée ici (statut "en_attente"), AVANT la redirection
+      // vers HelloAsso — et non plus après le retour, sur la seule foi d'un
+      // paramètre d'URL construit côté navigateur (faille corrigée : rien
+      // n'empêchait auparavant de fabriquer directement l'URL de retour pour
+      // réserver une place sans jamais payer). Le retour de paiement passe par
+      // /api/checkout/callback (GET, ci-dessous), qui interroge l'API HelloAsso
+      // server-to-server avant de valider quoi que ce soit.
       if (resource === 'checkout' && method === 'POST') {
+        // Même limite que /api/registrations : la création d'inscription a lieu
+        // ici désormais, donc le rate limit doit s'appliquer ici aussi.
+        const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+        if (isRateLimited(clientIp, 10, 60_000)) {
+          return err('Trop de requêtes. Veuillez patienter avant de réessayer.', 429);
+        }
+
         const body = await request.json();
-        const { event_id, nom, prenom, email } = body;
-        if (!event_id || !nom || !prenom || !email) {
+        if (!body.event_id || !body.nom || !body.prenom || !body.email) {
           return err('Champs requis : event_id, nom, prenom, email');
         }
-        const rawEvent = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first();
-        const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
-        if (!ev)                     return err('Evenement introuvable', 404);
-        if (ev.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
-        if (ev.status === 'complet') return err('Evenement complet', 409);
-        if (ev.status === 'ferme')   return err('Les inscriptions sont fermées pour cet événement', 409);
-        if (ev.spots_left <= 0)      return err('Plus de places disponibles', 409);
+        const rawEvent = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(body.event_id).first();
+        const evCheck = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
+        if (!evCheck)                     return err('Evenement introuvable', 404);
+        if (evCheck.price === 0)          return err('Evenement gratuit, pas de checkout', 400);
 
+        const result = await createRegistrationRow(env, body);
+        if (!result.ok) {
+          return json({
+            error: 'Une inscription existe déjà pour cet email à cet événement.',
+            code: 'duplicate_registration',
+            existing_id: result.existing_id,
+            paiement_status: result.paiement_status,
+            montant: result.montant,
+          }, 409);
+        }
+
+        const { id: registrationId, ev } = result;
         const origin    = url.origin;
-        const returnUrl = `${origin}/?checkout=success&event_id=${event_id}`;
-        const errorUrl  = `${origin}/?checkout=error&event_id=${event_id}`;
+        const returnUrl = `${origin}/api/checkout/callback?registration_id=${registrationId}&result=success`;
+        const errorUrl  = `${origin}/api/checkout/callback?registration_id=${registrationId}&result=error`;
 
-        const redirectUrl = await createHelloAssoCheckout(env, {
-          eventTitle: ev.title,
-          amount:     ev.price,
-          email, prenom, nom,
-          returnUrl, errorUrl,
-        });
-        return json({ redirectUrl });
+        try {
+          const { redirectUrl, checkoutIntentId } = await createHelloAssoCheckout(env, {
+            eventTitle: ev.title,
+            amount:     ev.price,
+            email: body.email, prenom: body.prenom, nom: body.nom,
+            returnUrl, errorUrl,
+          });
+          await env.DB.prepare(`UPDATE registrations SET helloasso_ref = ? WHERE id = ?`)
+            .bind(checkoutIntentId, registrationId).run();
+          return json({ redirectUrl, registration_id: registrationId });
+        } catch (checkoutError) {
+          // Le checkout HelloAsso n'a pas pu être créé : on annule tout de suite
+          // l'inscription "en_attente" pour ne pas bloquer la place pour rien.
+          await env.DB.prepare(`UPDATE registrations SET paiement_status = 'annule' WHERE id = ?`)
+            .bind(registrationId).run();
+          await syncEventAvailability(env.DB, body.event_id);
+          throw checkoutError;
+        }
+      }
+
+      // GET /api/checkout/callback — retour HelloAsso (succès ou échec/annulation).
+      // Jamais appelé directement par le front : c'est l'URL vers laquelle
+      // HelloAsso redirige le navigateur après paiement.
+      if (resource === 'checkout' && resId === 'callback' && method === 'GET') {
+        const registrationId = url.searchParams.get('registration_id');
+        const outcome        = url.searchParams.get('result');
+        const origin          = url.origin;
+        const redirectTo = (params) => Response.redirect(`${origin}/?${new URLSearchParams(params).toString()}`, 302);
+
+        if (!registrationId) return redirectTo({ checkout: 'error' });
+
+        const reg = await env.DB.prepare(`SELECT * FROM registrations WHERE id = ?`).bind(registrationId).first();
+        if (!reg) return redirectTo({ checkout: 'error' });
+
+        // Retour "annulé" ou "échoué" côté HelloAsso : on libère la place tout de
+        // suite plutôt que d'attendre le cron de purge des paniers abandonnés.
+        if (outcome !== 'success') {
+          if (reg.paiement_status === 'en_attente') {
+            await env.DB.prepare(`UPDATE registrations SET paiement_status = 'annule' WHERE id = ?`).bind(registrationId).run();
+            await syncEventAvailability(env.DB, reg.event_id);
+          }
+          return redirectTo({ checkout: 'error', event_id: reg.event_id, registration_id: reg.id, reason: 'cancelled' });
+        }
+
+        // Déjà confirmée (ex. rechargement du callback) : pas besoin de revérifier.
+        if (reg.paiement_status === 'paye') {
+          return redirectTo({ checkout: 'success', event_id: reg.event_id, registration_id: reg.id, paiement_status: 'paye' });
+        }
+
+        if (!reg.helloasso_ref) {
+          return redirectTo({ checkout: 'error', event_id: reg.event_id, registration_id: reg.id, reason: 'missing_reference' });
+        }
+
+        try {
+          const intent = await getHelloAssoCheckoutIntent(env, reg.helloasso_ref);
+          const paymentState = buildHelloAssoPaymentState(intent, reg.montant);
+          if (paymentState.paid) {
+            await env.DB.prepare(`UPDATE registrations SET paiement_status = 'paye' WHERE id = ?`).bind(registrationId).run();
+            const rawEvent = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(reg.event_id).first();
+            const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
+            let emailSent = false;
+            if (ev) {
+              const emailResults = await sendConfirmationEmails(env, { reg: { ...reg, paiement_status: 'paye' }, ev });
+              emailSent = !!emailResults?.participant?.ok;
+            }
+            return redirectTo({
+              checkout: 'success', event_id: reg.event_id, registration_id: reg.id,
+              paiement_status: 'paye', email_sent: emailSent ? '1' : '0',
+            });
+          }
+          // Vérifié auprès de HelloAsso mais pas (encore) payé : on n'annule pas
+          // immédiatement (latence possible côté HelloAsso) — le cron de purge des
+          // paniers abandonnés s'en chargera si ça ne se confirme jamais.
+          return redirectTo({ checkout: 'error', event_id: reg.event_id, registration_id: reg.id, reason: 'not_paid' });
+        } catch (verifyError) {
+          console.error('[checkout/callback] vérification HelloAsso échouée', verifyError);
+          return redirectTo({ checkout: 'error', event_id: reg.event_id, registration_id: reg.id, reason: 'verification_error' });
+        }
       }
 
       return err('Route introuvable', 404);

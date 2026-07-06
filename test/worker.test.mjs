@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// worker.js importe `./index.html` comme texte brut via le bundler de Wrangler
-// (règle de module par défaut). Sous Vitest/Node, on simule cet import.
+// worker.js importe `./index.html` et `./mentions-legales.html` comme texte brut
+// via le bundler de Wrangler (règle de module par défaut). Sous Vitest/Node, on
+// simule ces imports.
 vi.mock('../index.html', () => ({ default: '<!doctype html><html></html>' }));
+vi.mock('../mentions-legales.html', () => ({ default: '<!doctype html><html></html>' }));
 
 const {
   ApiError,
@@ -16,6 +18,7 @@ const {
   validateRegistration,
   isUniqueConstraintError,
   isRateLimited,
+  buildHelloAssoPaymentState,
 } = await import('../worker.js');
 
 describe('secureEquals', () => {
@@ -193,5 +196,41 @@ describe('isRateLimited', () => {
     const ip = 'test-ip-' + Math.random();
     for (let i = 0; i < 10; i++) isRateLimited(ip, 10);
     expect(isRateLimited(ip, 10)).toBe(true);
+  });
+});
+
+describe('buildHelloAssoPaymentState', () => {
+  // Vérification server-to-server du paiement (correctif : calendrier ne
+  // validait auparavant aucun paiement réel avant de créer une inscription).
+  it('considère payé quand le montant réglé couvre le montant attendu', () => {
+    const intent = { order: { payments: [{ amount: 4500 }] } };
+    const state = buildHelloAssoPaymentState(intent, 45);
+    expect(state.paid).toBe(true);
+    expect(state.paidAmountCents).toBe(4500);
+  });
+
+  it('considère payé quand plusieurs paiements cumulés couvrent le montant', () => {
+    const intent = { order: { payments: [{ amount: 2000 }, { amount: 2500 }] } };
+    expect(buildHelloAssoPaymentState(intent, 45).paid).toBe(true);
+  });
+
+  it("n'est pas payé si le montant réglé est inférieur au montant attendu", () => {
+    const intent = { order: { payments: [{ amount: 1000 }] } };
+    expect(buildHelloAssoPaymentState(intent, 45).paid).toBe(false);
+  });
+
+  it("n'est pas payé s'il n'y a aucun paiement", () => {
+    const intent = { order: { payments: [] } };
+    expect(buildHelloAssoPaymentState(intent, 45).paid).toBe(false);
+  });
+
+  it('gère un intent sans commande associée (ex. abandon avant paiement)', () => {
+    expect(buildHelloAssoPaymentState({}, 45).paid).toBe(false);
+    expect(buildHelloAssoPaymentState(null, 45).paid).toBe(false);
+  });
+
+  it('ignore les paiements null/undefined dans le tableau', () => {
+    const intent = { order: { payments: [null, { amount: 4500 }, undefined] } };
+    expect(buildHelloAssoPaymentState(intent, 45).paid).toBe(true);
   });
 });

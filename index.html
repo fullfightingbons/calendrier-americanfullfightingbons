@@ -1030,58 +1030,30 @@ async function handleCheckoutReturn() {
   const params  = new URLSearchParams(window.location.search);
   const status  = params.get('checkout');
   const eventId = params.get('event_id');
+  const regId   = params.get('registration_id');
 
   if (!status) return;
 
   window.history.replaceState({}, '', window.location.pathname);
 
+  // L'inscription a déjà été créée AVANT le paiement, et /api/checkout/callback
+  // (côté serveur) a déjà vérifié auprès de HelloAsso si elle est réellement
+  // payée avant de rediriger ici — il n'y a plus rien à créer ni à revérifier
+  // depuis le navigateur, seulement à afficher le résultat transmis par l'URL.
   if (status === 'success') {
-
-    // Empêche un double traitement si l'utilisateur recharge la page
-    if (sessionStorage.getItem('checkout_processed')) {
-      return;
-    }
-
-    sessionStorage.setItem('checkout_processed', '1');
-
-    const raw = sessionStorage.getItem('pending_registration');
-    sessionStorage.removeItem('pending_registration');
-
-    if (!raw) {
-      sessionStorage.removeItem('checkout_processed');
-
-      showReturnError('Paiement validé mais données d\'inscription introuvables. Contactez le club.');
-      loadHeroCalendar();
-      return;
-    }
-
-    try {
-      const payload = JSON.parse(raw);
-
-      // création UNIQUE de l'inscription
-      const created = await API.post('/api/registrations', payload);
-
-      showReturnSuccess(created.id, eventId, created);
-
-      // Autorise une future inscription
-      sessionStorage.removeItem('checkout_processed');
-
-    } catch(e) {
-      console.error(e);
-      sessionStorage.removeItem('checkout_processed');
-      if (e?.status === 409 && e?.code === 'duplicate_registration') {
-        showReturnSuccess(e?.payload?.existing_id || 'déjà enregistrée', eventId, {
-          paiement_status: e?.payload?.paiement_status || 'en_attente',
-          emails: null,
-        });
-        return;
-      }
-      showReturnError('Paiement reçu mais erreur lors de l\'enregistrement. Contactez le club.');
-    }
-
+    showReturnSuccess(regId || '—', eventId, {
+      paiement_status: params.get('paiement_status') || 'paye',
+      emails: { participant: { ok: params.get('email_sent') === '1' } },
+    });
   } else if (status === 'error') {
-
-    showReturnError('Le paiement a été annulé ou a échoué. Vous pouvez réessayer depuis la page événements.');
+    const reason = params.get('reason');
+    const messages = {
+      not_paid:            'Le paiement n\'a pas pu être confirmé pour le moment. Si le prélèvement a bien eu lieu de votre côté, contactez le club avec votre nom et la date de l\'événement.',
+      verification_error:  'Une erreur est survenue lors de la vérification du paiement. Contactez le club si le prélèvement a bien eu lieu.',
+      missing_reference:   'Impossible de retrouver votre paiement. Contactez le club.',
+      cancelled:           'Le paiement a été annulé ou a échoué. Vous pouvez réessayer depuis la page événements.',
+    };
+    showReturnError(messages[reason] || messages.cancelled);
   }
 
   loadHeroCalendar();
@@ -1453,17 +1425,15 @@ async function openHelloAsso() {
   errBox.style.display  = 'none';
 
   try {
-    // 1. Collecter le payload et le sauvegarder avant de quitter la page
+    // 1. Collecter le payload complet du formulaire
     const payload = collectFormPayload();
-    sessionStorage.setItem('pending_registration', JSON.stringify(payload));
 
-    // 2. Créer la session HelloAsso checkout via le Worker (sans pré-enregistrer)
-    const checkout = await API.post('/api/checkout', {
-      event_id: currentEvent.id,
-      nom:      payload.nom,
-      prenom:   payload.prenom,
-      email:    payload.email,
-    });
+    // 2. Créer l'inscription (statut "en_attente") ET la session HelloAsso en un
+    //    seul appel — le Worker crée désormais la ligne d'inscription avant de
+    //    rediriger vers HelloAsso, et vérifiera réellement le paiement à son
+    //    retour (cf. /api/checkout/callback). Plus de sessionStorage : la
+    //    réservation de la place ne dépend plus de ce que fait le navigateur.
+    const checkout = await API.post('/api/checkout', payload);
 
     // 3. Rediriger vers la page de paiement HelloAsso
     window.location.href = checkout.redirectUrl;
