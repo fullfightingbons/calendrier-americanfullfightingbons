@@ -176,7 +176,11 @@ function getAllowedOrigins(env, requestUrl) {
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-  return new Set([requestUrl.origin, ...configured]);
+  return new Set([
+    requestUrl.origin,
+    'https://espace-membre.americanfullfightingbons.fr',
+    ...configured,
+  ]);
 }
 
 function buildCorsHeaders(request, env, requestUrl) {
@@ -1540,6 +1544,44 @@ export default {
           console.error('[checkout/callback] vérification HelloAsso échouée', verifyError);
           return redirectTo({ checkout: 'error', event_id: reg.event_id, registration_id: reg.id, reason: 'verification_error' });
         }
+      }
+
+      // ── GET /api/member/registrations — espace membre ────────────────────
+      // Vérifie le jeton signé émis par gestion (même SESSION_SECRET, même
+      // format createSessionToken/parseSessionToken — les deux Workers
+      // partagent déjà exactement le même schéma HMAC) et renvoie les
+      // inscriptions de l'adhérent, retrouvées par email. Lecture seule,
+      // token en en-tête Authorization (jamais de cookie ici : ce Worker n'a
+      // pas à connaître le cookie de session de gestion).
+      if (method === 'GET' && path === '/api/member/registrations') {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+        if (!token) return err('Non autorisé', 401);
+
+        let session;
+        try {
+          session = await parseSessionToken(token, env);
+        } catch (e) {
+          console.error('[member/registrations] SESSION_SECRET absent ou invalide côté calendrier', e);
+          return err('Service momentanément indisponible', 503);
+        }
+        if (!session || session.kind !== 'member' || !session.email || Number(session.expiresAt) < Date.now()) {
+          return err('Session invalide ou expirée', 401);
+        }
+
+        const email = String(session.email).trim().toLowerCase();
+        const { results } = await env.DB.prepare(`
+          SELECT r.id, r.event_id, r.paiement_status, r.created_at,
+                 e.title, e.sub, e.type, e.date_start, e.date_end, e.time_start, e.lieu, e.price
+          FROM registrations r
+          JOIN events e ON e.id = r.event_id
+          WHERE LOWER(TRIM(r.email)) = ?
+          ORDER BY e.date_start DESC
+        `).bind(email).all();
+
+        return new Response(JSON.stringify({ data: results || [], error: null }), {
+          headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+        });
       }
 
       return err('Route introuvable', 404);
