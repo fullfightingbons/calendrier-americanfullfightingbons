@@ -265,6 +265,15 @@ footer span{color:#888}
 .confirm-title{font-family:var(--font-display);font-size:22px;letter-spacing:.5px;margin-bottom:8px}
 .confirm-msg{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:1.5rem}
 .confirm-btns{display:flex;gap:10px;justify-content:center}
+.toast-stack{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:min(380px,calc(100vw - 24px))}
+.toast{background:var(--dark-2);color:var(--text);border:1px solid var(--border);border-left:4px solid var(--gold);border-radius:12px;box-shadow:var(--shadow-card);padding:14px 16px;font-family:var(--font-body);animation:toast-in .18s ease-out}
+.toast.error{border-left-color:#C0392B}
+.toast.success{border-left-color:#2ecc71}
+.toast-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:12px}
+.toast-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0}
+.toast-close:hover{color:var(--text)}
+.toast-body{margin-top:6px;font-size:13px;line-height:1.5;color:var(--text)}
+@keyframes toast-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .admin-empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
 .admin-empty-icon{font-size:48px;margin-bottom:1rem;opacity:.5}
 .admin-spots-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px}
@@ -928,6 +937,75 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/* ────────────────────────────────────────────────────────
+   NOTIFICATIONS (toasts) — remplace window.alert() natif
+   ──────────────────────────────────────────────────────── */
+let toastSeq = 0;
+const TOAST_LIFETIME = 6000;
+
+function notify(type, message) {
+  const text = String(message ?? '');
+  if (!text) return;
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
+  }
+  const id = 'toast-' + (++toastSeq);
+  const title = type === 'error' ? 'Erreur' : type === 'success' ? 'Succès' : 'Information';
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+  el.id = id;
+  el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  el.innerHTML = `<div class="toast-title">${title}<button class="toast-close" type="button" aria-label="Fermer">×</button></div><div class="toast-body"></div>`;
+  el.querySelector('.toast-body').textContent = text; // textContent : échappement automatique
+  el.querySelector('.toast-close').onclick = () => el.remove();
+  stack.appendChild(el);
+  setTimeout(() => el.remove(), TOAST_LIFETIME);
+}
+
+window.alert = function (message) {
+  const text = String(message ?? '');
+  const isError = /^(erreur|échec|impossible)\b/i.test(text) || /\berreur\s*:/i.test(text);
+  notify(isError ? 'error' : 'info', text);
+};
+
+/* ────────────────────────────────────────────────────────
+   CONFIRMATION (promesse) — remplace window.confirm() natif
+   Réutilise la modale #confirm-overlay déjà présente dans le HTML
+   (utilisée par ailleurs par askDeleteReg/askDeletePoster, etc.,
+   qui restent inchangés et continuent de fonctionner tels quels).
+   Usage : if (!await confirmModal('Supprimer ?')) return;
+   ──────────────────────────────────────────────────────── */
+function confirmModal(message, options) {
+  options = options || {};
+  const overlay   = document.getElementById('confirm-overlay');
+  const titleEl   = document.getElementById('confirm-title');
+  const msgEl     = document.getElementById('confirm-msg');
+  const iconEl    = overlay.querySelector('.confirm-icon');
+  const yesBtn    = document.getElementById('confirm-yes-btn');
+  const cancelBtn = overlay.querySelector('.btn-cancel');
+  titleEl.textContent = options.title || 'CONFIRMATION';
+  msgEl.textContent = message;
+  if (iconEl) iconEl.textContent = options.icon || '❓';
+  yesBtn.textContent = options.okLabel || 'Confirmer';
+  yesBtn.style.background = options.okColor || 'var(--red)';
+  overlay.classList.add('open');
+  return new Promise(resolve => {
+    function onKey(e) { if (e.key === 'Escape') finish(false); }
+    function finish(result) {
+      closeConfirm();
+      document.removeEventListener('keydown', onKey, true);
+      resolve(result);
+    }
+    yesBtn.onclick = () => finish(true);
+    cancelBtn.onclick = () => finish(false);
+    document.addEventListener('keydown', onKey, true);
+  });
 }
 
 const CONFIG = {
@@ -2231,7 +2309,7 @@ async function toggleInscriptions(id, currentStatus) {
   if (!ev) return;
   const newStatus = currentStatus === 'ferme' ? 'disponible' : 'ferme';
   const label     = newStatus === 'ferme' ? 'fermer les inscriptions' : 'rouvrir les inscriptions';
-  if (!confirm(`Voulez-vous ${label} pour "${ev.title}" ?`)) return;
+  if (!await confirmModal(`Voulez-vous ${label} pour "${ev.title}" ?`, {title: 'INSCRIPTIONS', icon: '🔒', okLabel: 'Confirmer'})) return;
   try {
     const payload = {
       title:      ev.title,      sub:        ev.sub,
@@ -2286,8 +2364,8 @@ function closeConfirm() {
   document.getElementById('confirm-overlay').classList.remove('open');
 }
 
-function resetAdminEvents() {
-  if (!confirm('Réinitialiser la liste ? Cela rechargera les événements depuis la base.')) return;
+async function resetAdminEvents() {
+  if (!await confirmModal('Réinitialiser la liste ? Cela rechargera les événements depuis la base.', {title: 'RÉINITIALISER', icon: '🔄'})) return;
   initPage();
 }
 
