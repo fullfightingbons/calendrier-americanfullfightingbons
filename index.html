@@ -384,7 +384,7 @@ footer span{color:#888}
     <li><a href="https://espace-membre.americanfullfightingbons.fr/">Espace membre</a></li>
   </ul>
   <div style="display:flex;align-items:center;gap:10px">
-    <div class="header-badge">Saison 2025-2026</div>
+    <div class="header-badge" id="header-season-badge">Saison 2025-2026</div>
     <button onclick="openAdminLogin()" style="font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--red)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.16)';this.style.color='rgba(255,255,255,.75)'">⚙ Admin</button>
     <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMobilePanel" aria-label="Ouvrir le menu">
       <span></span>
@@ -702,7 +702,7 @@ footer span{color:#888}
 </div>
 
 <footer>
-  <span>AMERICAN FULL FIGHTING BONS EN CHABLAIS · FFK · Saison 2025-2026</span><br>
+  <span>AMERICAN FULL FIGHTING BONS EN CHABLAIS · FFK · Saison <span id="footer-season">2025-2026</span></span><br>
   Tous les paiements sont sécurisés via HelloAsso · <a href="/mentions-legales" style="color:inherit">Mentions légales &amp; données personnelles</a>
 </footer>
 
@@ -983,6 +983,15 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// Saison sportive en cours (ex. "2026-2027"). Bascule au 1er juillet, en
+// phase avec l'ouverture des inscriptions — voir getCurrentSeasonLabel()
+// côté worker.js (même règle, à garder synchronisée).
+function getSeasonLabel(separator = '-') {
+  const now = new Date();
+  const startYear = now.getMonth() + 1 >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${startYear}${separator}${startYear + 1}`;
+}
+
 /* ────────────────────────────────────────────────────────
    NOTIFICATIONS (toasts) — remplace window.alert() natif
    ──────────────────────────────────────────────────────── */
@@ -1258,6 +1267,13 @@ async function initPage() {
   // Gérer le retour HelloAsso APRÈS chargement des événements
   await handleCheckoutReturn();
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const badge = document.getElementById('header-season-badge');
+  if (badge) badge.textContent = `Saison ${getSeasonLabel('-')}`;
+  const footerSeason = document.getElementById('footer-season');
+  if (footerSeason) footerSeason.textContent = getSeasonLabel('-');
+});
 
 document.addEventListener('DOMContentLoaded', initPage);
 
@@ -2140,7 +2156,7 @@ if (!grouped[key]) {
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid #E10600">
     <div>
       <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;color:white;line-height:1">AMERICAN FULL FIGHTING</div>
-      <div style="font-size:13px;color:#9b9b9b;margin-top:4px">Bons-en-Chablais · FFK · Saison 2025–2026</div>
+      <div style="font-size:13px;color:#9b9b9b;margin-top:4px">Bons-en-Chablais · FFK · Saison ${getSeasonLabel('–')}</div>
     </div>
     <div style="text-align:right">
       <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:#E10600;letter-spacing:1px">CALENDRIER DES INSCRITS</div>
