@@ -360,6 +360,15 @@ footer span{color:#888}
   .admin-event-row{flex-wrap:wrap}
   .admin-toolbar{align-items:flex-start}
 }
+@media(max-width:480px){
+  /* Sous cette largeur, le nom complet du club + bouton admin + burger ne tiennent plus sur une ligne */
+  .logo-season{display:none}
+  .logo-name{font-size:14px}
+  .admin-login-label{display:none}
+  .admin-login-btn{padding:8px!important}
+  .topbar{padding:.5rem .6rem .5rem .75rem;gap:8px}
+  .nav-wrap{padding:.75rem .7rem 0}
+}
 </style>
 </head>
 <body>
@@ -386,7 +395,7 @@ footer span{color:#888}
   </ul>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="header-badge">Saison 2025-2026</div>
-    <button onclick="openAdminLogin()" style="font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--red)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.16)';this.style.color='rgba(255,255,255,.75)'">⚙ Admin</button>
+    <button onclick="openAdminLogin()" class="admin-login-btn" style="font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--red)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.16)';this.style.color='rgba(255,255,255,.75)'">⚙ <span class="admin-login-label">Admin</span></button>
     <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMobilePanel" aria-label="Ouvrir le menu">
       <span></span>
     </button>
