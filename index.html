@@ -319,7 +319,29 @@ footer span{color:#888}
 .regs-empty{text-align:center;padding:3rem;color:var(--muted);font-size:14px}
 .regs-loading{text-align:center;padding:2rem;color:var(--muted);font-size:13px}
 
+/* NAV MOBILE — bouton burger + panneau déroulant (la nav overflow sinon en dessous de 860px) */
+.nav-burger{display:none;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:12px;cursor:pointer;color:var(--white)}
+.nav-burger span,.nav-burger span::before,.nav-burger span::after{content:"";display:block;width:20px;height:2px;background:var(--white);border-radius:2px;transition:transform .2s ease,opacity .2s ease}
+.nav-burger span{position:relative}
+.nav-burger span::before{position:absolute;top:-6px}
+.nav-burger span::after{position:absolute;top:6px}
+.nav-burger[aria-expanded="true"] span{background:transparent}
+.nav-burger[aria-expanded="true"] span::before{top:0;transform:rotate(45deg)}
+.nav-burger[aria-expanded="true"] span::after{top:0;transform:rotate(-45deg)}
+.nav-mobile-panel{display:none;max-width:1180px;margin:.6rem auto 0;background:rgba(7,17,29,.96);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:.6rem;backdrop-filter:blur(16px);box-shadow:0 14px 42px rgba(7,17,29,.28)}
+.nav-mobile-panel.open{display:block}
+.nav-mobile-panel ul{list-style:none;display:flex;flex-direction:column;gap:2px}
+.nav-mobile-panel a{display:flex;align-items:center;min-height:48px;padding:.6rem 1rem;color:rgba(255,255,255,.86);text-decoration:none;font-size:1rem;font-weight:500;border-radius:12px}
+.nav-mobile-panel a:active,.nav-mobile-panel a:hover{background:rgba(255,255,255,.08);color:var(--white)}
+.nav-mobile-panel a[aria-current="page"]{color:var(--gold)}
+
 /* RESPONSIVE */
+@media(max-width:860px){
+  .topbar-links{display:none}
+  .nav-burger{display:flex}
+  .topbar{flex-wrap:nowrap}
+  .header-badge{display:none}
+}
 @media(max-width:580px){
   .form-row{grid-template-columns:1fr}
   .events-grid{grid-template-columns:1fr}
@@ -329,6 +351,13 @@ footer span{color:#888}
   .hero{padding:2.5rem 1rem}
   .regs-stats{flex-direction:column}
   .admin-tabs{flex-direction:column}
+  /* Empêche le zoom automatique d'iOS Safari au focus (nécessite >=16px) */
+  input,select,textarea{font-size:16px}
+  .btn-inscr,.btn-nav,.filter-btn{min-height:40px}
+  .admin-topbar{padding:0 1rem}
+  .admin-content{padding:1.25rem}
+  .admin-event-row{flex-wrap:wrap}
+  .admin-toolbar{align-items:flex-start}
 }
 </style>
 </head>
@@ -357,8 +386,20 @@ footer span{color:#888}
   <div style="display:flex;align-items:center;gap:10px">
     <div class="header-badge">Saison 2025-2026</div>
     <button onclick="openAdminLogin()" style="font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--red)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.16)';this.style.color='rgba(255,255,255,.75)'">⚙ Admin</button>
+    <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMobilePanel" aria-label="Ouvrir le menu">
+      <span></span>
+    </button>
   </div>
 </nav>
+<div class="nav-mobile-panel" id="navMobilePanel">
+  <ul>
+    <li><a href="https://americanfullfightingbons.fr/">Club</a></li>
+    <li><a href="https://inscription.americanfullfightingbons.fr/">Inscription</a></li>
+    <li><a href="https://calendrier.americanfullfightingbons.fr/" aria-current="page">Calendrier</a></li>
+    <li><a href="https://boutique.americanfullfightingbons.fr/">Boutique</a></li>
+    <li><a href="https://espace-membre.americanfullfightingbons.fr/">Espace membre</a></li>
+  </ul>
+</div>
 </div>
 
 
@@ -1219,6 +1260,24 @@ async function initPage() {
 }
 
 document.addEventListener('DOMContentLoaded', initPage);
+
+document.addEventListener('DOMContentLoaded', () => {
+  const navBurger = document.getElementById('navBurger');
+  const navPanel = document.getElementById('navMobilePanel');
+  if (!navBurger || !navPanel) return;
+  navBurger.addEventListener('click', () => {
+    const isOpen = navPanel.classList.toggle('open');
+    navBurger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    navBurger.setAttribute('aria-label', isOpen ? 'Fermer le menu' : 'Ouvrir le menu');
+  });
+  navPanel.addEventListener('click', (e) => {
+    if (e.target.tagName === 'A') {
+      navPanel.classList.remove('open');
+      navBurger.setAttribute('aria-expanded', 'false');
+      navBurger.setAttribute('aria-label', 'Ouvrir le menu');
+    }
+  });
+});
 
 /* ── Calendrier hero ──────────────────────────────── */
 async function loadHeroCalendar() {
