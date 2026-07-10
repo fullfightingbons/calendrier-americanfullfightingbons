@@ -59,7 +59,8 @@ describe('getAllowedOrigins', () => {
   it('ignore les entrées vides dans CORS_ALLOWED_ORIGINS', () => {
     const url = new URL('https://calendrier.americanfullfightingbons.fr/');
     const origins = getAllowedOrigins({ CORS_ALLOWED_ORIGINS: ',,' }, url);
-    expect(origins.size).toBe(1); // uniquement l'origine de la requête
+    // 2 = l'origine de la requête + l'origine espace-membre toujours autorisée
+    expect(origins.size).toBe(2);
   });
 });
 
