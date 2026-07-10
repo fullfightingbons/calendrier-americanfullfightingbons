@@ -647,16 +647,6 @@ function escapeHtmlEmail(value) {
     .replace(/'/g, '&#39;');
 }
 
-// Saison sportive en cours (ex. "2026–2027"). Bascule au 1er juillet : avant
-// cette date on est encore sur la saison qui se termine cet été, après on
-// est déjà sur la suivante — aligné sur l'ouverture des inscriptions.
-// separator: caractère entre les deux années ('-' ou '–' selon le contexte).
-function getCurrentSeasonLabel(separator = '-') {
-  const now = new Date();
-  const startYear = now.getMonth() + 1 >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${startYear}${separator}${startYear + 1}`;
-}
-
 async function sendConfirmationEmails(env, { reg, ev }) {
   const CLUB_EMAIL = CLUB_CONTACT_EMAIL;
   const CLUB_NAME  = 'AMERICAN FULL FIGHTING BONS EN CHABLAIS';
@@ -696,7 +686,7 @@ async function sendConfirmationEmails(env, { reg, ev }) {
     <p style="color:#666;font-size:13px">Pour toute question, contactez-nous à <a href="mailto:${CLUB_EMAIL}">${CLUB_EMAIL}</a>.</p>
     <p style="color:#666;font-size:13px">À bientôt sur le tatami 🥊</p>
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-    <p style="color:#aaa;font-size:11px;text-align:center">${CLUB_NAME} · Saison ${getCurrentSeasonLabel('–')}</p>
+    <p style="color:#aaa;font-size:11px;text-align:center">${CLUB_NAME} · Saison 2025–2026</p>
   </div>
 </body></html>`;
 
