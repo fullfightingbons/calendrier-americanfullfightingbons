@@ -70,3 +70,19 @@ jobs:
           printf '%s' "${{ secrets.CF_ADMIN_TOKEN }}" | \
             wrangler secret put ADMIN_TOKEN \
               --name calendrier-americanfullfightingbons
+
+      # CORRECTIF : cette étape manquait. Sans SESSION_SECRET posé sur le
+      # Worker, getSessionSecret() lève une exception dès la tentative de
+      # connexion admin (login qui échoue en 500, affiché à tort par le
+      # frontend comme "mot de passe incorrect") — cf. README, section
+      # Secrets requis. Le secret CF_SESSION_SECRET doit exister dans les
+      # secrets GitHub du dépôt (Settings → Secrets and variables → Actions) ;
+      # générez-le avec `openssl rand -base64 32` si besoin.
+      - name: Set SESSION_SECRET secret on Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          printf '%s' "${{ secrets.CF_SESSION_SECRET }}" | \
+            wrangler secret put SESSION_SECRET \
+              --name calendrier-americanfullfightingbons
