@@ -394,7 +394,7 @@ footer span{color:#888}
     <li><a href="https://espace-membre.americanfullfightingbons.fr/">Espace membre</a></li>
   </ul>
   <div style="display:flex;align-items:center;gap:10px">
-    <div class="header-badge">Saison 2025-2026</div>
+    <div class="header-badge" id="seasonBadge">Saison 2025-2026</div>
     <button onclick="openAdminLogin()" class="admin-login-btn" style="font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--red)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.16)';this.style.color='rgba(255,255,255,.75)'">⚙ <span class="admin-login-label">Admin</span></button>
     <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMobilePanel" aria-label="Ouvrir le menu">
       <span></span>
@@ -712,7 +712,7 @@ footer span{color:#888}
 </div>
 
 <footer>
-  <span>AMERICAN FULL FIGHTING BONS EN CHABLAIS · FFK · Saison 2025-2026</span><br>
+  <span id="seasonFooter">AMERICAN FULL FIGHTING BONS EN CHABLAIS · FFK · Saison 2025-2026</span><br>
   Tous les paiements sont sécurisés via HelloAsso · <a href="/mentions-legales" style="color:inherit">Mentions légales &amp; données personnelles</a>
 </footer>
 
@@ -1268,6 +1268,18 @@ async function initPage() {
   // Gérer le retour HelloAsso APRÈS chargement des événements
   await handleCheckoutReturn();
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Saison sportive calculée automatiquement (bascule le 1er juillet)
+  const now = new Date();
+  const y = now.getFullYear();
+  const seasonStartYear = now.getMonth() >= 6 ? y : y - 1; // getMonth() 6 = juillet
+  const seasonLabel = 'Saison ' + seasonStartYear + '-' + (seasonStartYear + 1);
+  const badge = document.getElementById('seasonBadge');
+  if (badge) badge.textContent = seasonLabel;
+  const footer = document.getElementById('seasonFooter');
+  if (footer) footer.textContent = 'AMERICAN FULL FIGHTING BONS EN CHABLAIS · FFK · ' + seasonLabel;
+});
 
 document.addEventListener('DOMContentLoaded', initPage);
 
