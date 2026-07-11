@@ -310,6 +310,24 @@ async function hydrateEvent(db, event) {
   return withComputedEventState(event, activeRegistrations);
 }
 
+// ── Éligibilité à l'auto-annulation par l'adhérent ──────────────
+// Un·e adhérent·e peut annuler lui/elle-même une inscription depuis l'espace
+// membre uniquement si : elle existe, elle n'est pas déjà annulée, elle
+// n'est pas déjà payée (un paiement HelloAsso confirmé doit passer par un
+// remboursement géré par le bureau — jamais une simple bascule de statut
+// côté membre) et l'événement n'a pas encore eu lieu. Fonction pure (aucun
+// accès DB) pour rester testable unitairement, sur le même principe que
+// withComputedEventState/validateEvent ci-dessus.
+function canMemberCancelRegistration(reg, event, nowMs = Date.now()) {
+  if (!reg) return { ok: false, reason: 'not_found' };
+  if (reg.paiement_status === 'annule') return { ok: false, reason: 'already_cancelled' };
+  if (reg.paiement_status === 'paye') return { ok: false, reason: 'paid_requires_refund' };
+  if (!event || !event.date_start) return { ok: false, reason: 'not_found' };
+  const startsAt = new Date(event.date_start).getTime();
+  if (Number.isNaN(startsAt) || startsAt < nowMs) return { ok: false, reason: 'event_passed' };
+  return { ok: true };
+}
+
 /**
  * Hydrate une liste d'événements en une seule requête agrégée (évite le N+1).
  * Pour chaque eventId, compte les inscriptions actives en une passe SQL.
@@ -721,6 +739,29 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   return { participant: participantEmail, club: clubEmail };
 }
 
+// Notifie le bureau qu'un·e adhérent·e a annulé lui/elle-même une
+// inscription (place libérée) — même style visuel que sendConfirmationEmails,
+// volontairement best-effort : un échec d'envoi ne doit jamais faire échouer
+// l'annulation elle-même côté route (cf. appel dans le handler DELETE).
+async function sendMemberCancellationEmail(env, { reg, ev }) {
+  const dateStr = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const html = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#E10600">↩️ Inscription annulée par l'adhérent·e — ${escapeHtmlEmail(ev.title)}</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600;width:40%">Participant</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.prenom)} ${escapeHtmlEmail(reg.nom)}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Email</td><td style="padding:8px 12px"><a href="mailto:${encodeURIComponent(reg.email)}">${escapeHtmlEmail(reg.email)}</a></td></tr>
+    <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Événement</td><td style="padding:8px 12px">${escapeHtmlEmail(ev.title)} — ${dateStr}</td></tr>
+    <tr><td style="padding:8px 12px;font-weight:600">Statut avant annulation</td><td style="padding:8px 12px">${escapeHtmlEmail(reg.paiement_status)}</td></tr>
+  </table>
+  <p style="color:#666;font-size:13px">Annulation effectuée directement depuis l'espace membre. La place est déjà libérée sur le calendrier.</p>
+</body></html>`;
+  return sendBrevoEmail(env, {
+    to: CLUB_CONTACT_EMAIL, toName: 'AMERICAN FULL FIGHTING BONS EN CHABLAIS',
+    subject: `↩️ Annulation — ${ev.title} — ${reg.nom} ${reg.prenom}`,
+    html,
+  });
+}
+
 // ── Rate limiting simple par IP (en mémoire, par isolat Worker) ──
 const rateLimitMap = new Map();
 function isRateLimited(ip, limit = 10, windowMs = 60_000) {
@@ -757,6 +798,7 @@ export {
   hashPassword,
   verifyPassword,
   buildHelloAssoPaymentState,
+  canMemberCancelRegistration,
 };
 
 
@@ -1580,6 +1622,81 @@ export default {
         `).bind(email).all();
 
         return new Response(JSON.stringify({ data: results || [], error: null }), {
+          headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+        });
+      }
+
+      // ── DELETE /api/member/registrations/:id — espace membre ─────────────
+      // Auto-annulation par l'adhérent·e, sur le même principe d'auth que la
+      // route GET ci-dessus (jeton signé, header Authorization uniquement).
+      // Double vérification de propriété : l'inscription doit appartenir à
+      // l'email du jeton, pas juste exister — sans ça n'importe quel
+      // adhérent connecté pourrait annuler l'inscription de quelqu'un
+      // d'autre en devinant un id. L'éligibilité (statut, date passée) est
+      // déléguée à canMemberCancelRegistration, gardée pure pour les tests.
+      const memberRegCancelMatch = path.match(/^\/api\/member\/registrations\/(\d+)$/);
+      if (method === 'DELETE' && memberRegCancelMatch) {
+        const registrationId = Number(memberRegCancelMatch[1]);
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+        if (!token) return err('Non autorisé', 401);
+
+        let session;
+        try {
+          session = await parseSessionToken(token, env);
+        } catch (e) {
+          console.error('[member/registrations:cancel] SESSION_SECRET absent ou invalide côté calendrier', e);
+          return err('Service momentanément indisponible', 503);
+        }
+        if (!session || session.kind !== 'member' || !session.email || Number(session.expiresAt) < Date.now()) {
+          return err('Session invalide ou expirée', 401);
+        }
+
+        const email = String(session.email).trim().toLowerCase();
+        const row = await env.DB.prepare(`
+          SELECT r.id, r.event_id, r.email, r.nom, r.prenom, r.paiement_status,
+                 e.title, e.date_start, e.lieu
+          FROM registrations r
+          JOIN events e ON e.id = r.event_id
+          WHERE r.id = ?
+        `).bind(registrationId).first();
+
+        if (!row || String(row.email).trim().toLowerCase() !== email) {
+          // Message identique, inscription inexistante ou appartenant à
+          // quelqu'un d'autre : on ne révèle jamais laquelle des deux.
+          return err('Inscription introuvable', 404);
+        }
+
+        const eligibility = canMemberCancelRegistration(
+          { paiement_status: row.paiement_status },
+          { date_start: row.date_start },
+        );
+        if (!eligibility.ok) {
+          const messages = {
+            already_cancelled: 'Cette inscription est déjà annulée.',
+            paid_requires_refund: "Cette inscription a déjà été payée : contactez le club pour organiser un remboursement avant de l'annuler.",
+            event_passed: 'Impossible d\'annuler une inscription à un événement déjà passé.',
+            not_found: 'Inscription introuvable',
+          };
+          return err(messages[eligibility.reason] || 'Annulation impossible.', 409);
+        }
+
+        const info = await env.DB.prepare(
+          `UPDATE registrations SET paiement_status = 'annule' WHERE id = ?`
+        ).bind(registrationId).run();
+        if (info.changes === 0) return err('Inscription introuvable', 404);
+        await syncEventAvailability(env.DB, row.event_id);
+
+        // Best-effort : le bureau est notifié pour suivre les désistements,
+        // mais un échec d'envoi ne doit jamais faire échouer l'annulation
+        // elle-même côté adhérent (même logique que les autres emails ici).
+        try {
+          await sendMemberCancellationEmail(env, { reg: row, ev: row });
+        } catch (e) {
+          console.error('[member/registrations:cancel] email de notification échoué', e);
+        }
+
+        return new Response(JSON.stringify({ data: { cancelled: true, id: registrationId, event_id: row.event_id }, error: null }), {
           headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
         });
       }

@@ -19,6 +19,7 @@ const {
   isUniqueConstraintError,
   isRateLimited,
   buildHelloAssoPaymentState,
+  canMemberCancelRegistration,
 } = await import('../worker.js');
 
 describe('secureEquals', () => {
@@ -233,5 +234,44 @@ describe('buildHelloAssoPaymentState', () => {
   it('ignore les paiements null/undefined dans le tableau', () => {
     const intent = { order: { payments: [null, { amount: 4500 }, undefined] } };
     expect(buildHelloAssoPaymentState(intent, 45).paid).toBe(true);
+  });
+});
+
+describe('canMemberCancelRegistration', () => {
+  const future = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  const past = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+
+  it('autorise l\'annulation pour une inscription en attente sur un événement à venir', () => {
+    const result = canMemberCancelRegistration({ paiement_status: 'en_attente' }, { date_start: future });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('autorise l\'annulation pour une inscription gratuite sur un événement à venir', () => {
+    const result = canMemberCancelRegistration({ paiement_status: 'gratuit' }, { date_start: future });
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuse si l\'inscription est déjà annulée', () => {
+    const result = canMemberCancelRegistration({ paiement_status: 'annule' }, { date_start: future });
+    expect(result).toEqual({ ok: false, reason: 'already_cancelled' });
+  });
+
+  it('refuse si l\'inscription est déjà payée (remboursement à gérer par le bureau)', () => {
+    const result = canMemberCancelRegistration({ paiement_status: 'paye' }, { date_start: future });
+    expect(result).toEqual({ ok: false, reason: 'paid_requires_refund' });
+  });
+
+  it('refuse si l\'événement est déjà passé', () => {
+    const result = canMemberCancelRegistration({ paiement_status: 'en_attente' }, { date_start: past });
+    expect(result).toEqual({ ok: false, reason: 'event_passed' });
+  });
+
+  it('refuse si l\'inscription est introuvable', () => {
+    expect(canMemberCancelRegistration(null, { date_start: future })).toEqual({ ok: false, reason: 'not_found' });
+  });
+
+  it('refuse si l\'événement est introuvable ou sans date', () => {
+    const result = canMemberCancelRegistration({ paiement_status: 'en_attente' }, null);
+    expect(result).toEqual({ ok: false, reason: 'not_found' });
   });
 });
