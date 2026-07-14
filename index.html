@@ -21,6 +21,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
 --red:#d84a2f;
@@ -354,11 +355,17 @@ footer span{color:#888}
   .admin-tabs{flex-direction:column}
   /* Empêche le zoom automatique d'iOS Safari au focus (nécessite >=16px) */
   input,select,textarea{font-size:16px}
-  .btn-inscr,.btn-nav,.filter-btn{min-height:40px}
+  .regs-select{font-size:16px}
+  .btn-inscr,.btn-nav,.filter-btn,.admin-btn-edit,.admin-btn-del,.admin-btn-toggle,.btn-add-event,.btn-save,.btn-cancel,.admin-toggle-btn,.btn-export,.btn-del-reg,.admin-btn-quit,.regs-select{min-height:40px}
+  .modal-close,.admin-modal-close{width:40px;height:40px;display:flex;align-items:center;justify-content:center;padding:0;top:.5rem}
+  .toast-close{padding:8px;margin:-8px}
   .admin-topbar{padding:0 1rem}
   .admin-content{padding:1.25rem}
   .admin-event-row{flex-wrap:wrap}
   .admin-toolbar{align-items:flex-start}
+  /* La barre d'étapes (4 libellés) est trop large pour tenir sur un petit écran : défilement horizontal plutôt que débordement */
+  .progress-steps{overflow-x:auto;justify-content:flex-start;gap:14px;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .progress-step{white-space:nowrap;flex-shrink:0}
 }
 @media(max-width:480px){
   /* Sous cette largeur, le nom complet du club + bouton admin + burger ne tiennent plus sur une ligne */
