@@ -1612,12 +1612,18 @@ export default {
         }
 
         const email = String(session.email).trim().toLowerCase();
+        // Seules les inscriptions dont le paiement est validé (payé ou
+        // gratuit) apparaissent dans l'espace membre : une inscription en
+        // attente de paiement n'est pas encore un engagement définitif du
+        // point de vue de l'adhérent, et une inscription annulée ne doit pas
+        // s'afficher comme si elle était toujours active.
         const { results } = await env.DB.prepare(`
           SELECT r.id, r.event_id, r.paiement_status, r.created_at,
                  e.title, e.sub, e.type, e.date_start, e.date_end, e.time_start, e.lieu, e.price
           FROM registrations r
           JOIN events e ON e.id = r.event_id
           WHERE LOWER(TRIM(r.email)) = ?
+            AND r.paiement_status IN ('paye', 'gratuit')
           ORDER BY e.date_start DESC
         `).bind(email).all();
 
