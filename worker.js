@@ -683,7 +683,12 @@ function normalizePdfText(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\x20-\x7E]/g, ' ')
+    // \u00B0 (°) est conservé : même code point en Latin-1/WinAnsi, donc un
+    // octet unique — btoa() ci-dessous (buildRichPdfBase64) l'encode
+    // correctement puisqu'il traite déjà la chaine octet par octet. Le strip
+    // ASCII générique ne doit pas l'emporter (cf. bug "N " au lieu de "N°"
+    // sur le numéro de facture).
+    .replace(/[^\x20-\x7E\u00B0]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
