@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Annuler mon inscription — Calendrier AFFBC</title>
+<style>
+  :root{--ink:#1a1a1a;--muted:#5a5a63;--accent:#b3121b;--line:#e7e7ea;--ok:#1a7a3c}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#fff;color:var(--ink)}
+  .shell{max-width:520px;margin:0 auto;padding:60px 24px 80px}
+  h1{font-size:26px;margin:0 0 18px}
+  p{font-size:15px;line-height:1.7;color:var(--muted)}
+  .card{border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:20px 0}
+  .card dt{font-weight:600;color:var(--ink);font-size:13px;margin-top:10px}
+  .card dt:first-child{margin-top:0}
+  .card dd{margin:2px 0 0;font-size:15px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:13px 22px;font-size:15px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button:hover:not(:disabled){opacity:.9}
+  .msg{padding:14px 16px;border-radius:8px;font-size:14px;margin-top:16px}
+  .msg.error{background:#fdecea;color:#8a1c1c}
+  .msg.ok{background:#e9f7ee;color:var(--ok)}
+  .back{display:inline-flex;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;margin-top:28px}
+  .back:hover{color:var(--ink)}
+  .loading{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <h1>Annuler mon inscription</h1>
+  <div id="content"><p class="loading">Chargement…</p></div>
+  <a class="back" href="/">← Retour au calendrier</a>
+</div>
+<script>
+(function () {
+  const token = location.pathname.split('/').filter(Boolean).pop();
+  const content = document.getElementById('content');
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderError(message) {
+    content.innerHTML = '<div class="msg error">' + escapeHtml(message) + '</div>';
+  }
+
+  async function load() {
+    try {
+      const res = await fetch('/api/registrations/cancel/' + encodeURIComponent(token));
+      const data = await res.json();
+      if (!res.ok) return renderError(data.error || "Ce lien n'est plus valide.");
+
+      const dateStr = data.date_start
+        ? new Date(data.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+        : '';
+
+      content.innerHTML =
+        '<p>Vous êtes sur le point d\'annuler l\'inscription suivante :</p>' +
+        '<dl class="card">' +
+          '<dt>Participant</dt><dd>' + escapeHtml(data.prenom) + ' ' + escapeHtml(data.nom) + '</dd>' +
+          '<dt>Événement</dt><dd>' + escapeHtml(data.event_title) + '</dd>' +
+          '<dt>Date</dt><dd>' + escapeHtml(dateStr) + '</dd>' +
+          (data.lieu ? '<dt>Lieu</dt><dd>' + escapeHtml(data.lieu) + '</dd>' : '') +
+        '</dl>';
+
+      if (!data.can_cancel) {
+        const reasons = {
+          paid_requires_refund: "Cette inscription a déjà été payée : contactez le club pour organiser un remboursement avant de l'annuler.",
+          event_passed: "Impossible d'annuler une inscription à un événement déjà passé.",
+          already_cancelled: 'Cette inscription est déjà annulée.',
+        };
+        content.innerHTML += '<div class="msg error">' + escapeHtml(reasons[data.reason] || 'Annulation impossible pour cette inscription.') + '</div>';
+        return;
+      }
+
+      const btn = document.createElement('button');
+      btn.textContent = 'Confirmer l\'annulation';
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = 'Annulation en cours…';
+        try {
+          const confirmRes = await fetch('/api/registrations/cancel/' + encodeURIComponent(token), { method: 'POST' });
+          const confirmData = await confirmRes.json();
+          if (!confirmRes.ok) {
+            btn.disabled = false;
+            btn.textContent = 'Confirmer l\'annulation';
+            content.insertAdjacentHTML('beforeend', '<div class="msg error">' + escapeHtml(confirmData.error || "L'annulation a échoué.") + '</div>');
+            return;
+          }
+          btn.remove();
+          content.insertAdjacentHTML('beforeend', '<div class="msg ok">Votre inscription a bien été annulée. À bientôt sur le tatami !</div>');
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Confirmer l\'annulation';
+          content.insertAdjacentHTML('beforeend', '<div class="msg error">Une erreur réseau est survenue, veuillez réessayer.</div>');
+        }
+      };
+      content.appendChild(btn);
+    } catch (e) {
+      renderError('Une erreur est survenue. Merci de réessayer un peu plus tard.');
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

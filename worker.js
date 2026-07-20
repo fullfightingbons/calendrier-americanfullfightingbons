@@ -7,6 +7,7 @@
 
 import INDEX_HTML from './index.html';
 import MENTIONS_HTML from './mentions-legales.html';
+import ANNULATION_HTML from './annulation.html';
 
 // Logo compressé (WebP, ~24 Ko) — servi via la route /logo.webp ci-dessous.
 // Remplace l'ancien Logo.jpg (2,6 Mo) hot-linké depuis raw.githubusercontent.com.
@@ -197,6 +198,7 @@ function buildCorsHeaders(request, env, requestUrl) {
 
 const ADMIN_SESSION_COOKIE = 'affbc_calendar_session';
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const CLUB_SITE_ORIGIN = 'https://calendrier.americanfullfightingbons.fr';
 const CLUB_CONTACT_EMAIL = 'fullfightingbons@gmail.com';
 const MAIL_SENDER_EMAIL = 'contact@americanfullfightingbons.fr';
 
@@ -458,6 +460,10 @@ async function createRegistrationRow(env, body) {
   }
 
   const paiementStatus = ev.price === 0 ? 'gratuit' : 'en_attente';
+  // Jeton d'auto-annulation publique (cf. canCancelByToken / route
+  // /api/registrations/cancel/:token) — généré à la création, jamais
+  // affiché nulle part sauf dans le lien de l'email de confirmation.
+  const cancelToken = crypto.randomUUID();
 
   let info;
   try {
@@ -476,9 +482,9 @@ async function createRegistrationRow(env, body) {
         ceinture_actuelle, ceinture_visee,
         parent_nom, parent_prenom, parent_tel,
         message, certif_medical, droit_image, reglement_ok,
-        montant, paiement_status, helloasso_ref
+        montant, paiement_status, helloasso_ref, cancel_token
       )
-      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
       WHERE (
         SELECT COUNT(*) FROM registrations r
         WHERE r.event_id = ? AND r.paiement_status IN ('en_attente', 'paye', 'gratuit')
@@ -492,7 +498,7 @@ async function createRegistrationRow(env, body) {
       body.parent_nom        ?? null, body.parent_prenom  ?? null, body.parent_tel ?? null,
       body.message           ?? null,
       body.certif_medical ? 1 : 0, body.droit_image ? 1 : 0, body.reglement_ok ? 1 : 0,
-      ev.price, paiementStatus, body.helloasso_ref ?? null,
+      ev.price, paiementStatus, body.helloasso_ref ?? null, cancelToken,
       body.event_id, body.event_id,
     ).run();
   } catch (insertError) {
@@ -518,6 +524,7 @@ async function createRegistrationRow(env, body) {
   }
 
   await syncEventAvailability(env.DB, body.event_id);
+  await markWaitlistConverted(env, body.event_id, normalizedEmail);
 
   return {
     ok: true,
@@ -526,6 +533,7 @@ async function createRegistrationRow(env, body) {
     paiementStatus,
     normalizedEmail,
     bodyUsed: body,
+    cancelToken,
   };
 }
 
@@ -613,12 +621,15 @@ async function getHelloAssoCheckoutIntent(env, checkoutIntentId) {
 }
 
 // ── Brevo — envoi d'email ──────────────────────────────────────
-async function sendBrevoEmail(env, { to, toName, subject, html, attachment }) {
+async function sendBrevoEmail(env, { to, toName, subject, html, attachment, attachments }) {
   if (!env.BREVO_API_KEY) {
     console.error('BREVO: clé API manquante — emails non envoyés');
     return { ok: false, error: 'missing_api_key' };
   }
   console.log('BREVO: tentative envoi à', to, '| sujet:', subject);
+  // `attachment` (singulier, historique) et `attachments` (pluriel, ex: facture
+  // PDF + fichier .ics) peuvent être combinés — Brevo accepte un seul tableau.
+  const allAttachments = [...(attachment ? [attachment] : []), ...(attachments || [])];
   try {
     const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
@@ -632,7 +643,7 @@ async function sendBrevoEmail(env, { to, toName, subject, html, attachment }) {
         to:      [{ email: to, name: toName }],
         subject,
         htmlContent: html,
-        ...(attachment ? { attachment: [attachment] } : {}),
+        ...(allAttachments.length ? { attachment: allAttachments } : {}),
       }),
     });
     const body = await resp.json().catch(() => ({}));
@@ -838,12 +849,17 @@ function buildEventInvoicePdfBase64(registration, event) {
   return buildRichPdfBase64(content);
 }
 
-async function sendConfirmationEmails(env, { reg, ev }) {
+async function sendConfirmationEmails(env, { reg, ev, cancelToken }) {
   const CLUB_EMAIL = CLUB_CONTACT_EMAIL;
   const CLUB_NAME  = 'AMERICAN FULL FIGHTING BONS EN CHABLAIS';
   const prix       = ev.price === 0 ? 'Gratuit' : `${ev.price} €`;
   const dateStr    = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const isConfirmed = reg.paiement_status === 'gratuit' || reg.paiement_status === 'paye';
+  // Lien d'auto-annulation (cf. GET/POST /api/registrations/cancel/:token) —
+  // seulement affiché quand l'annulation reste possible côté public (une
+  // inscription déjà payée doit passer par le bureau, cf. canCancelByToken).
+  const cancelEligible = cancelToken && canCancelByToken(reg, ev).ok;
+  const cancelUrl = cancelEligible ? `${CLUB_SITE_ORIGIN}/annulation/${cancelToken}` : null;
   const participantTitle = isConfirmed ? '✅ Inscription confirmée' : '⏳ Inscription enregistrée';
   const participantIntro = isConfirmed
     ? 'Votre inscription à l\'événement suivant a bien été confirmée :'
@@ -875,6 +891,7 @@ async function sendConfirmationEmails(env, { reg, ev }) {
       <tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:600">Statut dossier</td><td style="padding:8px 12px">${participantStatus}</td></tr>
     </table>
     <p style="color:#666;font-size:13px">Pour toute question, contactez-nous à <a href="mailto:${CLUB_EMAIL}">${CLUB_EMAIL}</a>.</p>
+    ${cancelUrl ? `<p style="color:#666;font-size:13px">Un empêchement ? <a href="${cancelUrl}">Annuler mon inscription</a>.</p>` : ''}
     <p style="color:#666;font-size:13px">À bientôt sur le tatami 🥊</p>
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
     <p style="color:#aaa;font-size:11px;text-align:center">${CLUB_NAME} · Saison 2025–2026</p>
@@ -899,17 +916,23 @@ async function sendConfirmationEmails(env, { reg, ev }) {
   // Facture PDF jointe uniquement quand l'inscription est confirmée (payée
   // ou gratuite) — même logique que la boutique, qui ne facture qu'une
   // commande réellement confirmée, jamais une commande en attente.
-  let participantAttachment;
+  const participantAttachments = [];
   if (isConfirmed) {
     try {
       const pdfBase64 = buildEventInvoicePdfBase64(reg, ev);
-      participantAttachment = {
+      participantAttachments.push({
         name: `facture-inscription-${String(reg.id || '').slice(0, 8)}.pdf`,
         content: pdfBase64,
-      };
+      });
     } catch (err) {
       console.error('[facture] génération PDF échouée pour l\'inscription', reg.id, err?.message || err);
     }
+  }
+  try {
+    const icsBase64 = btoa(unescape(encodeURIComponent(buildEventIcs(ev))));
+    participantAttachments.push({ name: `${String(ev.id)}.ics`, content: icsBase64 });
+  } catch (err) {
+    console.error('[ics] génération échouée pour l\'événement', ev.id, err?.message || err);
   }
 
   const [participantEmail, clubEmail] = await Promise.all([
@@ -917,7 +940,7 @@ async function sendConfirmationEmails(env, { reg, ev }) {
       to: reg.email, toName: `${reg.prenom} ${reg.nom}`,
       subject: participantSubject,
       html: participantHtml,
-      attachment: participantAttachment,
+      attachments: participantAttachments,
     }),
     sendBrevoEmail(env, {
       to: CLUB_EMAIL, toName: CLUB_NAME,
@@ -950,6 +973,206 @@ async function sendMemberCancellationEmail(env, { reg, ev }) {
     subject: `↩️ Annulation — ${ev.title} — ${reg.nom} ${reg.prenom}`,
     html,
   });
+}
+
+// ── Liste d'attente ──────────────────────────────────────────────
+// Notifie le/la premier·e inscrit·e en attente qu'une place vient de se
+// libérer sur l'événement. Appelée après toute annulation (admin, membre, ou
+// paiement HelloAsso jamais confirmé) une fois l'événement resynchronisé.
+// Best-effort : une notification manquée ne doit jamais faire échouer
+// l'annulation elle-même (mêmes garanties que sendMemberCancellationEmail).
+async function notifyNextWaitlistEntry(env, eventId) {
+  try {
+    const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(eventId).first();
+    if (!rawEvent) return;
+    const ev = await hydrateEvent(env.DB, rawEvent);
+    if (ev.spots_left <= 0) return; // toujours complet malgré l'annulation (ex: liste d'attente plus longue que les places libérées)
+
+    const entry = await env.DB.prepare(`
+      SELECT * FROM waitlist
+      WHERE event_id = ? AND statut = 'attente'
+      ORDER BY created_at ASC
+      LIMIT 1
+    `).bind(eventId).first();
+    if (!entry) return;
+
+    const dateStr = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const html = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+    <div style="background:#050505;padding:20px 24px;border-radius:8px 8px 0 0;text-align:center">
+      <span style="font-family:sans-serif;font-size:22px;font-weight:900;letter-spacing:2px;color:#fff">AMERICAN FULL FIGHTING</span><br>
+      <span style="color:#aaa;font-size:13px">Bons-en-Chablais · FFK</span>
+    </div>
+    <div style="border:1px solid #eee;border-top:none;padding:28px 24px;border-radius:0 0 8px 8px">
+      <h2 style="color:#E10600;margin-top:0">🎉 Une place vient de se libérer !</h2>
+      <p>Bonjour <strong>${escapeHtmlEmail(entry.prenom)} ${escapeHtmlEmail(entry.nom)}</strong>,</p>
+      <p>Vous étiez sur liste d'attente pour <strong>${escapeHtmlEmail(ev.title)}</strong> (${dateStr}) : une place s'est libérée.</p>
+      <p><strong>Inscrivez-vous rapidement</strong> depuis notre calendrier en ligne — les places restent au premier arrivé, premier servi, y compris pour les autres personnes en liste d'attente.</p>
+      <p style="color:#666;font-size:13px">Cette notification est valable 48h. Passé ce délai, la place pourra être proposée à la personne suivante sur la liste.</p>
+      <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+      <p style="color:#aaa;font-size:11px;text-align:center">AMERICAN FULL FIGHTING BONS EN CHABLAIS</p>
+    </div>
+  </body></html>`;
+
+    await sendBrevoEmail(env, {
+      to: entry.email, toName: `${entry.prenom} ${entry.nom}`,
+      subject: `🎉 Une place s'est libérée — ${ev.title}`,
+      html,
+    });
+
+    await env.DB.prepare(`
+      UPDATE waitlist
+      SET statut = 'notifie', notified_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+          notify_expires_at = strftime('%Y-%m-%dT%H:%M:%SZ','now', '+48 hours'),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+      WHERE id = ?
+    `).bind(entry.id).run();
+  } catch (e) {
+    console.error('[waitlist] notifyNextWaitlistEntry a échoué pour l\'événement', eventId, e?.message || e);
+  }
+}
+
+// Marque converties les entrées de liste d'attente correspondant à une
+// inscription qui vient d'être créée normalement (même event_id + email) —
+// évite de continuer à notifier quelqu'un qui s'est déjà réinscrit·e.
+async function markWaitlistConverted(env, eventId, email) {
+  try {
+    await env.DB.prepare(`
+      UPDATE waitlist SET statut = 'convertie', updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+      WHERE event_id = ? AND email = ? AND statut IN ('attente', 'notifie')
+    `).bind(eventId, email).run();
+  } catch (e) {
+    console.error('[waitlist] markWaitlistConverted a échoué', e?.message || e);
+  }
+}
+
+// Cron : expire les notifications de liste d'attente non converties après
+// 48h et relance la personne suivante — sans quoi une place resterait
+// bloquée indéfiniment sur une seule notification jamais suivie d'effet.
+async function expireWaitlistNotifications(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT DISTINCT event_id FROM waitlist
+    WHERE statut = 'notifie' AND notify_expires_at < strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  `).all();
+  if (!results || results.length === 0) return;
+
+  await env.DB.prepare(`
+    UPDATE waitlist SET statut = 'expiree', updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    WHERE statut = 'notifie' AND notify_expires_at < strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  `).run();
+
+  for (const { event_id } of results) {
+    await notifyNextWaitlistEntry(env, event_id);
+  }
+  console.log(`[cron] expireWaitlistNotifications: ${results.length} événement(s) avec relance de la liste d'attente`);
+}
+
+// ── Rappel J-1 ───────────────────────────────────────────────────
+async function sendEventReminderEmail(env, { reg, ev }) {
+  const dateStr = new Date(ev.date_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const heure = ev.time_start ? ` à ${escapeHtmlEmail(ev.time_start)}` : '';
+  const html = `<!DOCTYPE html><html lang="fr"><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto;padding:20px">
+  <div style="background:#050505;padding:20px 24px;border-radius:8px 8px 0 0;text-align:center">
+    <span style="font-family:sans-serif;font-size:22px;font-weight:900;letter-spacing:2px;color:#fff">AMERICAN FULL FIGHTING</span><br>
+    <span style="color:#aaa;font-size:13px">Bons-en-Chablais · FFK</span>
+  </div>
+  <div style="border:1px solid #eee;border-top:none;padding:28px 24px;border-radius:0 0 8px 8px">
+    <h2 style="color:#E10600;margin-top:0">⏰ C'est demain !</h2>
+    <p>Bonjour <strong>${escapeHtmlEmail(reg.prenom)} ${escapeHtmlEmail(reg.nom)}</strong>,</p>
+    <p>Petit rappel : vous êtes inscrit·e à <strong>${escapeHtmlEmail(ev.title)}</strong>, qui a lieu demain (${dateStr}${heure}) à <strong>${escapeHtmlEmail(ev.lieu)}</strong>.</p>
+    <p style="color:#666;font-size:13px">À demain sur le tatami 🥊</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+    <p style="color:#aaa;font-size:11px;text-align:center">AMERICAN FULL FIGHTING BONS EN CHABLAIS</p>
+  </div>
+</body></html>`;
+  return sendBrevoEmail(env, {
+    to: reg.email, toName: `${reg.prenom} ${reg.nom}`,
+    subject: `⏰ Rappel — ${ev.title} c'est demain`,
+    html,
+  });
+}
+
+// Cron quotidien : envoie un rappel aux inscrit·e·s confirmé·e·s (payé ou
+// gratuit) d'un événement qui a lieu le lendemain, une seule fois par
+// inscription (rappel_envoye_at). N'échoue jamais l'ensemble du cron si
+// un envoi individuel échoue (best-effort, cf. autres fonctions du cron).
+async function sendEventReminders(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT r.*, e.title, e.date_start, e.time_start, e.lieu
+    FROM registrations r
+    JOIN events e ON e.id = r.event_id
+    WHERE date(e.date_start) = date('now', '+1 day')
+      AND r.paiement_status IN ('paye', 'gratuit')
+      AND r.rappel_envoye_at IS NULL
+  `).all();
+  if (!results || results.length === 0) return;
+
+  let sent = 0;
+  for (const reg of results) {
+    try {
+      await sendEventReminderEmail(env, { reg, ev: reg });
+      await env.DB.prepare(
+        `UPDATE registrations SET rappel_envoye_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`
+      ).bind(reg.id).run();
+      sent++;
+    } catch (e) {
+      console.error(`[cron] sendEventReminders: échec envoi pour l'inscription #${reg.id}`, e?.message || e);
+    }
+  }
+  console.log(`[cron] sendEventReminders: ${sent}/${results.length} rappel(s) envoyé(s)`);
+}
+
+// ── Export ICS (RFC 5545) ────────────────────────────────────────
+// Format minimal mais valide, sans dépendance externe. icsEscape suit les
+// règles d'échappement du format (virgule, point-virgule, retour ligne,
+// antislash), distinctes de l'échappement HTML utilisé pour les emails.
+function icsEscape(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
+function icsDateStamp(dateStr, timeStr) {
+  // dateStr: YYYY-MM-DD, timeStr: HH:MM ou null → all-day (VALUE=DATE) sinon horodaté (heure locale, pas de TZID pour rester simple)
+  const compact = String(dateStr).replace(/-/g, '');
+  if (!timeStr) return { value: compact, allDay: true };
+  const compactTime = String(timeStr).replace(':', '') + '00';
+  return { value: `${compact}T${compactTime}`, allDay: false };
+}
+
+function buildEventIcs(ev) {
+  const uid = `event-${ev.id}@americanfullfightingbons.fr`;
+  const dtStart = icsDateStamp(ev.date_start, ev.time_start);
+  const dtEnd = icsDateStamp(ev.date_end || ev.date_start, ev.time_end || ev.time_start);
+  const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//AFFBC//Calendrier//FR',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${now}`,
+    dtStart.allDay ? `DTSTART;VALUE=DATE:${dtStart.value}` : `DTSTART:${dtStart.value}`,
+    dtEnd.allDay ? `DTEND;VALUE=DATE:${dtEnd.value}` : `DTEND:${dtEnd.value}`,
+    `SUMMARY:${icsEscape(ev.title)}`,
+    `DESCRIPTION:${icsEscape(ev.sub || '')}`,
+    `LOCATION:${icsEscape(ev.lieu || '')}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+  return lines.join('\r\n');
+}
+
+// ── Auto-annulation publique par lien signé ──────────────────────
+// Équivalent de canMemberCancelRegistration, mais pour les inscrit·e·s
+// externes (non-adhérents, sans compte espace membre) : même règle métier
+// (pas d'auto-annulation d'un paiement confirmé, jamais après l'événement),
+// vérifiée à partir du cancel_token inclus dans l'email de confirmation
+// plutôt que d'une session bearer. Fonction pure, testable comme les autres.
+function canCancelByToken(reg, event, nowMs = Date.now()) {
+  return canMemberCancelRegistration(reg, event, nowMs);
 }
 
 // ── Rate limiting simple par IP (en mémoire, par isolat Worker) ──
@@ -989,6 +1212,9 @@ export {
   verifyPassword,
   buildHelloAssoPaymentState,
   canMemberCancelRegistration,
+  canCancelByToken,
+  buildEventIcs,
+  icsEscape,
 };
 
 
@@ -1096,7 +1322,7 @@ async function purgeAbandonedCheckouts(env) {
       try {
         const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(reg.event_id).first();
         const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
-        if (ev) await sendConfirmationEmails(env, { reg: { ...reg, paiement_status: 'paye' }, ev });
+        if (ev) await sendConfirmationEmails(env, { reg: { ...reg, paiement_status: 'paye' }, ev, cancelToken: reg.cancel_token });
       } catch (emailError) {
         console.error(`[cron] purgeAbandonedCheckouts: email de confirmation rattrapée échoué pour #${reg.id}`, emailError);
       }
@@ -1117,6 +1343,8 @@ export default {
   async scheduled(_event, env, _ctx) {
     await purgeExpiredEvents(env);
     await purgeAbandonedCheckouts(env);
+    await sendEventReminders(env);
+    await expireWaitlistNotifications(env);
   },
 
   async fetch(request, env) {
@@ -1201,6 +1429,19 @@ export default {
         headers: securityHeaders({
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'public, max-age=300',
+        }),
+      });
+    }
+
+    // Page autonome liée depuis l'email de confirmation (cf. sendConfirmationEmails
+    // → cancelUrl) — ne réutilise pas la SPA principale pour rester indépendante
+    // d'éventuels changements de routing côté index.html.
+    if ((method === 'GET' || method === 'HEAD') && /^\/annulation\/[a-zA-Z0-9-]+$/.test(path)) {
+      return new Response(ANNULATION_HTML, {
+        status: 200,
+        headers: securityHeaders({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
         }),
       });
     }
@@ -1351,6 +1592,88 @@ export default {
               date_start ASC
           `).all();
           return json(await hydrateEvents(env.DB, results));
+        }
+
+        // GET /api/events/:id/ics [public] — export calendrier (RFC 5545),
+        // à placer AVANT le GET générique ci-dessous (même resId, subRes en plus).
+        if (method === 'GET' && resId && subRes === 'ics') {
+          const ev = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(resId).first();
+          if (!ev) return err('Événement introuvable', 404);
+          const ics = buildEventIcs(ev);
+          const safeFilename = String(ev.title || 'evenement')
+            .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'evenement';
+          return new Response(ics, {
+            headers: securityHeaders({
+              ...corsHeaders,
+              'Content-Type': 'text/calendar; charset=utf-8',
+              'Content-Disposition': `attachment; filename="${safeFilename}.ics"`,
+            }),
+          });
+        }
+
+        // POST /api/events/series [admin] — crée plusieurs occurrences d'un même
+        // événement (ex: cours hebdomadaire), à placer AVANT le POST générique
+        // ci-dessous (même méthode, resId='series' en plus). Corps attendu :
+        // { template: {...mêmes champs que la création d'un événement, sans date_start},
+        //   date_start, weekday_interval_days (par défaut 7), occurrences (nombre d'occurrences) }
+        if (method === 'POST' && resId === 'series') {
+          await requireAdmin();
+          const body = await request.json();
+          const template = body.template || {};
+          const occurrences = Number(body.occurrences);
+          const intervalDays = Number(body.interval_days) || 7;
+          if (!Number.isInteger(occurrences) || occurrences < 1 || occurrences > 52) {
+            return err('occurrences doit être un entier entre 1 et 52');
+          }
+          if (!body.date_start || !/^\d{4}-\d{2}-\d{2}$/.test(String(body.date_start))) {
+            return err('date_start doit être au format YYYY-MM-DD');
+          }
+          validateEvent({ ...template, date_start: body.date_start });
+
+          const seriesId = `series${Date.now().toString(36)}`;
+          const created = [];
+          const startDate = new Date(`${body.date_start}T00:00:00Z`);
+          for (let i = 0; i < occurrences; i += 1) {
+            const occDate = new Date(startDate.getTime() + i * intervalDays * 86_400_000);
+            const occDateStr = occDate.toISOString().slice(0, 10);
+            const id = genId('evt');
+            await env.DB.prepare(`
+              INSERT INTO events
+                (id, title, sub, type, status, date_start, date_end, time_start, time_end,
+                 lieu, price, spots_total, spots_left, featured, is_grade, helloasso, helloasso_url, series_id)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            `).bind(
+              id, template.title, template.sub, template.type,
+              template.status ?? 'disponible',
+              occDateStr, template.date_end ?? null,
+              template.time_start ?? null, template.time_end ?? null,
+              template.lieu, template.price ?? 0,
+              template.spots_total ?? 0, template.spots_total ?? 0,
+              template.featured  ? 1 : 0, template.is_grade  ? 1 : 0,
+              template.helloasso ? 1 : 0, template.helloasso_url ?? null,
+              seriesId,
+            ).run();
+            created.push(id);
+          }
+          return json({ series_id: seriesId, created_event_ids: created }, 201);
+        }
+
+        // DELETE /api/events/series/:seriesId [admin] — supprime (avec archivage,
+        // cf. archiveAndDeleteEvent) toutes les occurrences encore présentes
+        // d'une série créée via POST /api/events/series.
+        if (method === 'DELETE' && resId === 'series' && subRes) {
+          await requireAdmin();
+          const { results: seriesEvents } = await env.DB.prepare(
+            `SELECT id, poster_key FROM events WHERE series_id = ?`
+          ).bind(subRes).all();
+          let archivedRegistrations = 0;
+          for (const { id, poster_key } of seriesEvents) {
+            const result = await archiveAndDeleteEvent(env.DB, id);
+            if (result) archivedRegistrations += result.archived_registrations;
+            if (poster_key) await deleteEventPosterKey(env, poster_key);
+          }
+          return json({ deleted_events: seriesEvents.length, archived_registrations: archivedRegistrations });
         }
 
         if (method === 'GET' && resId) {
@@ -1592,7 +1915,7 @@ export default {
             }, 409);
           }
 
-          const { id, ev, paiementStatus, normalizedEmail, bodyUsed } = result;
+          const { id, ev, paiementStatus, normalizedEmail, bodyUsed, cancelToken } = result;
           const regData = {
             nom: bodyUsed.nom, prenom: bodyUsed.prenom, email: normalizedEmail,
             telephone: bodyUsed.telephone, date_naissance: bodyUsed.date_naissance,
@@ -1602,7 +1925,7 @@ export default {
             parent_nom: bodyUsed.parent_nom ?? null, parent_prenom: bodyUsed.parent_prenom ?? null, parent_tel: bodyUsed.parent_tel ?? null,
             paiement_status: paiementStatus,
           };
-          const emailResults = await sendConfirmationEmails(env, { reg: regData, ev });
+          const emailResults = await sendConfirmationEmails(env, { reg: regData, ev, cancelToken });
           return json({
             id,
             event_id: bodyUsed.event_id,
@@ -1630,6 +1953,7 @@ export default {
           `).bind(body.paiement_status, body.helloasso_ref ?? null, resId).run();
           if (info.changes === 0) return err('Inscription introuvable', 404);
           await syncEventAvailability(env.DB, registration.event_id);
+          if (body.paiement_status === 'annule') await notifyNextWaitlistEntry(env, registration.event_id);
           return json({ id: resId, paiement_status: body.paiement_status });
         }
 
@@ -1649,8 +1973,203 @@ export default {
           if (info.changes === 0) return err('Inscription introuvable', 404);
 
           await syncEventAvailability(env.DB, reg.event_id);
+          await notifyNextWaitlistEntry(env, reg.event_id);
 
           return json({ deleted: Number(resId), event_id: reg.event_id });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  LISTE D'ATTENTE
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'waitlist') {
+
+        // POST /api/waitlist [public] — rejoindre la liste d'attente d'un
+        // événement complet ou fermé. Body : { event_id, nom, prenom, email, telephone }
+        if (method === 'POST' && !resId) {
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(`waitlist:${clientIp}`, 10, 60_000)) {
+            return err('Trop de requêtes. Veuillez patienter avant de réessayer.', 429);
+          }
+          const body = await request.json();
+          const required = ['event_id', 'nom', 'prenom', 'email'];
+          for (const f of required) {
+            if (!body[f]) return err(`Champ requis manquant : ${f}`);
+          }
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) return err('Email invalide');
+
+          const rawEvent = await env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(body.event_id).first();
+          if (!rawEvent) return err('Événement introuvable', 404);
+          const ev = await hydrateEvent(env.DB, rawEvent);
+          if (ev.spots_left > 0) return err("Cet événement a encore des places disponibles : inscrivez-vous directement.", 409);
+
+          const normalizedEmail = String(body.email).toLowerCase().trim();
+          try {
+            const info = await env.DB.prepare(`
+              INSERT INTO waitlist (event_id, nom, prenom, email, telephone)
+              VALUES (?, ?, ?, ?, ?)
+            `).bind(body.event_id, body.nom, body.prenom, normalizedEmail, body.telephone ?? null).run();
+            return json({ id: info.meta.last_row_id, event_id: body.event_id }, 201);
+          } catch (insertError) {
+            if (isUniqueConstraintError(insertError, 'idx_waitlist_unique_email_event')) {
+              return json({ error: 'Vous êtes déjà sur la liste d\'attente pour cet événement.', code: 'duplicate_waitlist' }, 409);
+            }
+            throw insertError;
+          }
+        }
+
+        // GET /api/waitlist?event_id=... [admin]
+        if (method === 'GET' && !resId) {
+          await requireAdmin();
+          const eventFilter = url.searchParams.get('event_id');
+          let query = `SELECT w.*, e.title AS event_title FROM waitlist w JOIN events e ON e.id = w.event_id WHERE 1=1`;
+          const params = [];
+          if (eventFilter) { query += ` AND w.event_id = ?`; params.push(eventFilter); }
+          query += ` ORDER BY w.event_id, w.created_at ASC`;
+          const stmt = env.DB.prepare(query);
+          const { results } = await (params.length ? stmt.bind(...params) : stmt).all();
+          return json(results);
+        }
+
+        // DELETE /api/waitlist/:id [admin]
+        if (method === 'DELETE' && resId) {
+          await requireAdmin();
+          const info = await env.DB.prepare(`DELETE FROM waitlist WHERE id = ?`).bind(resId).run();
+          if (info.changes === 0) return err('Entrée de liste d\'attente introuvable', 404);
+          return json({ deleted: Number(resId) });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  AUTO-ANNULATION PUBLIQUE PAR LIEN SIGNÉ (non-adhérents)
+      // ══════════════════════════════════════════════════════════
+      // GET  /api/registrations/cancel/:token → aperçu (nom, événement, éligibilité)
+      // POST /api/registrations/cancel/:token → confirme l'annulation
+      // Réutilise canCancelByToken (même règle que canMemberCancelRegistration :
+      // pas d'auto-annulation d'un paiement confirmé ni d'un événement passé).
+      {
+        const cancelTokenMatch = path.match(/^\/api\/registrations\/cancel\/([a-zA-Z0-9-]+)$/);
+        if (cancelTokenMatch) {
+          const cancelToken = cancelTokenMatch[1];
+          const row = await env.DB.prepare(`
+            SELECT r.id, r.event_id, r.nom, r.prenom, r.email, r.paiement_status, r.cancel_token,
+                   e.title, e.date_start, e.lieu
+            FROM registrations r JOIN events e ON e.id = r.event_id
+            WHERE r.cancel_token = ?
+          `).bind(cancelToken).first();
+
+          if (method === 'GET') {
+            if (!row) return err('Lien invalide ou déjà utilisé', 404);
+            const eligibility = canCancelByToken(
+              { paiement_status: row.paiement_status },
+              { date_start: row.date_start },
+            );
+            return json({
+              nom: row.nom, prenom: row.prenom, event_title: row.title,
+              date_start: row.date_start, lieu: row.lieu,
+              paiement_status: row.paiement_status,
+              can_cancel: eligibility.ok, reason: eligibility.reason ?? null,
+            });
+          }
+
+          if (method === 'POST') {
+            if (!row) return err('Lien invalide ou déjà utilisé', 404);
+            const eligibility = canCancelByToken(
+              { paiement_status: row.paiement_status },
+              { date_start: row.date_start },
+            );
+            if (!eligibility.ok) {
+              const messages = {
+                already_cancelled: 'Cette inscription est déjà annulée.',
+                paid_requires_refund: "Cette inscription a déjà été payée : contactez le club pour organiser un remboursement avant de l'annuler.",
+                event_passed: 'Impossible d\'annuler une inscription à un événement déjà passé.',
+                not_found: 'Inscription introuvable',
+              };
+              return err(messages[eligibility.reason] || 'Annulation impossible.', 409);
+            }
+            // Jeton à usage unique : on l'invalide en même temps que l'annulation
+            // pour qu'un lien déjà utilisé ne puisse pas resservir.
+            await env.DB.prepare(
+              `UPDATE registrations SET paiement_status = 'annule', cancel_token = NULL WHERE id = ?`
+            ).bind(row.id).run();
+            await syncEventAvailability(env.DB, row.event_id);
+            await notifyNextWaitlistEntry(env, row.event_id);
+            try {
+              await sendMemberCancellationEmail(env, { reg: row, ev: row });
+            } catch (e) {
+              console.error('[registrations/cancel] notification bureau échouée', e?.message || e);
+            }
+            return json({ ok: true });
+          }
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  AVIS PUBLICS SUR LES ÉVÉNEMENTS
+      // ══════════════════════════════════════════════════════════
+      if (resource === 'reviews') {
+
+        // POST /api/reviews [public] — soumission d'un avis, non publié tant
+        // que l'admin ne l'a pas validé (cf. PUT .../publish ci-dessous).
+        if (method === 'POST' && !resId) {
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(`reviews:${clientIp}`, 5, 60_000)) {
+            return err('Trop de requêtes. Veuillez patienter avant de réessayer.', 429);
+          }
+          const body = await request.json();
+          if (!body.event_id || !body.nom || !body.note) {
+            return err('Champs requis manquants : event_id, nom, note');
+          }
+          const note = Number(body.note);
+          if (!Number.isInteger(note) || note < 1 || note > 5) return err('note doit être un entier entre 1 et 5');
+          const ev = await env.DB.prepare(`SELECT id FROM events WHERE id = ?`).bind(body.event_id).first();
+          if (!ev) return err('Événement introuvable', 404);
+
+          const info = await env.DB.prepare(`
+            INSERT INTO event_reviews (event_id, nom, email, note, commentaire)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(body.event_id, body.nom, body.email ?? null, note, body.commentaire ?? null).run();
+          return json({ id: info.meta.last_row_id, statut: 'en_attente_moderation' }, 201);
+        }
+
+        // GET /api/reviews?event_id=... [public] — avis publiés uniquement
+        if (method === 'GET' && !resId) {
+          const eventFilter = url.searchParams.get('event_id');
+          let query = `SELECT id, event_id, nom, note, commentaire, created_at FROM event_reviews WHERE publie = 1`;
+          const params = [];
+          if (eventFilter) { query += ` AND event_id = ?`; params.push(eventFilter); }
+          query += ` ORDER BY created_at DESC LIMIT 100`;
+          const stmt = env.DB.prepare(query);
+          const { results } = await (params.length ? stmt.bind(...params) : stmt).all();
+          return json(results);
+        }
+
+        // GET /api/reviews/admin [admin] — tous les avis, y compris non publiés
+        if (method === 'GET' && resId === 'admin') {
+          await requireAdmin();
+          const { results } = await env.DB.prepare(
+            `SELECT r.*, e.title AS event_title FROM event_reviews r JOIN events e ON e.id = r.event_id ORDER BY r.created_at DESC`
+          ).all();
+          return json(results);
+        }
+
+        // PUT /api/reviews/:id/publish [admin] — bascule publié/non publié
+        if (method === 'PUT' && resId && subRes === 'publish') {
+          await requireAdmin();
+          const body = await request.json();
+          const info = await env.DB.prepare(
+            `UPDATE event_reviews SET publie = ? WHERE id = ?`
+          ).bind(body.publie ? 1 : 0, resId).run();
+          if (info.changes === 0) return err('Avis introuvable', 404);
+          return json({ id: Number(resId), publie: !!body.publie });
+        }
+
+        // DELETE /api/reviews/:id [admin]
+        if (method === 'DELETE' && resId) {
+          await requireAdmin();
+          const info = await env.DB.prepare(`DELETE FROM event_reviews WHERE id = ?`).bind(resId).run();
+          if (info.changes === 0) return err('Avis introuvable', 404);
+          return json({ deleted: Number(resId) });
         }
       }
 
@@ -1760,7 +2279,7 @@ export default {
             const ev = rawEvent ? await hydrateEvent(env.DB, rawEvent) : null;
             let emailSent = false;
             if (ev) {
-              const emailResults = await sendConfirmationEmails(env, { reg: { ...reg, paiement_status: 'paye' }, ev });
+              const emailResults = await sendConfirmationEmails(env, { reg: { ...reg, paiement_status: 'paye' }, ev, cancelToken: reg.cancel_token });
               emailSent = !!emailResults?.participant?.ok;
             }
             return redirectTo({
@@ -1882,6 +2401,7 @@ export default {
         ).bind(registrationId).run();
         if (info.changes === 0) return err('Inscription introuvable', 404);
         await syncEventAvailability(env.DB, row.event_id);
+        await notifyNextWaitlistEntry(env, row.event_id);
 
         // Best-effort : le bureau est notifié pour suivre les désistements,
         // mais un échec d'envoi ne doit jamais faire échouer l'annulation

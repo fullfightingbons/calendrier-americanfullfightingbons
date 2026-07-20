@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 // simule ces imports.
 vi.mock('../index.html', () => ({ default: '<!doctype html><html></html>' }));
 vi.mock('../mentions-legales.html', () => ({ default: '<!doctype html><html></html>' }));
+vi.mock('../annulation.html', () => ({ default: '<!doctype html><html></html>' }));
 
 const {
   ApiError,
@@ -20,6 +21,9 @@ const {
   isRateLimited,
   buildHelloAssoPaymentState,
   canMemberCancelRegistration,
+  canCancelByToken,
+  buildEventIcs,
+  icsEscape,
 } = await import('../worker.js');
 
 describe('secureEquals', () => {
@@ -273,5 +277,57 @@ describe('canMemberCancelRegistration', () => {
   it('refuse si l\'événement est introuvable ou sans date', () => {
     const result = canMemberCancelRegistration({ paiement_status: 'en_attente' }, null);
     expect(result).toEqual({ ok: false, reason: 'not_found' });
+  });
+});
+
+describe('canCancelByToken', () => {
+  // Alias direct de canMemberCancelRegistration (même règle métier, cf.
+  // commentaire dans worker.js) : on vérifie juste que l'alias se comporte
+  // bien à l'identique plutôt que de dupliquer tous les cas ci-dessus.
+  const future = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+
+  it('applique la même règle que canMemberCancelRegistration', () => {
+    const reg = { paiement_status: 'en_attente' };
+    const ev = { date_start: future };
+    expect(canCancelByToken(reg, ev)).toEqual(canMemberCancelRegistration(reg, ev));
+  });
+
+  it('refuse une inscription payée', () => {
+    expect(canCancelByToken({ paiement_status: 'paye' }, { date_start: future }))
+      .toEqual({ ok: false, reason: 'paid_requires_refund' });
+  });
+});
+
+describe('icsEscape', () => {
+  it('échappe les caractères spéciaux du format ICS', () => {
+    expect(icsEscape('Stage; niveau, avancé\nséance 2')).toBe('Stage\\; niveau\\, avancé\\nséance 2');
+  });
+
+  it('gère les valeurs null/undefined', () => {
+    expect(icsEscape(null)).toBe('');
+    expect(icsEscape(undefined)).toBe('');
+  });
+});
+
+describe('buildEventIcs', () => {
+  it('génère un VCALENDAR valide avec les champs de l\'événement', () => {
+    const ics = buildEventIcs({
+      id: 'evt123', title: 'Stage Kick-boxing', sub: 'Niveau intermédiaire',
+      lieu: 'Dojo AFFBC', date_start: '2026-09-12', time_start: '14:00',
+      date_end: '2026-09-12', time_end: '17:00',
+    });
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('END:VCALENDAR');
+    expect(ics).toContain('SUMMARY:Stage Kick-boxing');
+    expect(ics).toContain('LOCATION:Dojo AFFBC');
+    expect(ics).toContain('DTSTART:20260912T140000');
+    expect(ics).toContain('DTEND:20260912T170000');
+    expect(ics).toContain('UID:event-evt123@americanfullfightingbons.fr');
+  });
+
+  it('utilise VALUE=DATE pour un événement sans horaire', () => {
+    const ics = buildEventIcs({ id: 'evt456', title: 'Journée portes ouvertes', date_start: '2026-10-01' });
+    expect(ics).toContain('DTSTART;VALUE=DATE:20261001');
+    expect(ics).toContain('DTEND;VALUE=DATE:20261001');
   });
 });

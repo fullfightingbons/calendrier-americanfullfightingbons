@@ -491,6 +491,33 @@ footer span{color:#888}
   <img class="poster-lightbox-img" id="poster-lightbox-img" src="" alt="">
 </div>
 
+<!-- MODALE LISTE D'ATTENTE (événement complet) -->
+<div class="poster-lightbox-overlay" id="waitlist-overlay" onclick="maybeCloseWaitlist(event)">
+  <div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;padding:2rem;max-width:420px;width:100%;position:relative">
+    <button onclick="closeWaitlistModal()" aria-label="Fermer" style="position:absolute;top:14px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted,#5a5a63)">✕</button>
+    <div style="font-weight:800;font-size:1.15rem;margin-bottom:.25rem" id="waitlist-modal-title">Liste d'attente</div>
+    <p style="font-size:.9rem;color:var(--muted,#5a5a63);margin:0 0 1.2rem">Cet événement est complet. Laissez vos coordonnées : on vous prévient par email dès qu'une place se libère.</p>
+    <div class="form-group">
+      <label>Nom <span class="req">*</span></label>
+      <input type="text" id="wl-nom" placeholder="DUPONT">
+    </div>
+    <div class="form-group">
+      <label>Prénom <span class="req">*</span></label>
+      <input type="text" id="wl-prenom" placeholder="Léa">
+    </div>
+    <div class="form-group">
+      <label>Email <span class="req">*</span></label>
+      <input type="email" id="wl-email" placeholder="lea.dupont@example.fr">
+    </div>
+    <div class="form-group">
+      <label>Téléphone</label>
+      <input type="tel" id="wl-tel" placeholder="06 00 00 00 00">
+    </div>
+    <div id="waitlist-msg" style="display:none;font-size:.85rem;padding:.6rem .8rem;border-radius:8px;margin-bottom:1rem"></div>
+    <button class="btn-inscr primary" style="width:100%" onclick="submitWaitlist()" id="waitlist-submit-btn">Rejoindre la liste d'attente</button>
+  </div>
+</div>
+
 <!-- MODAL INSCRIPTION -->
 <div class="modal-overlay" id="modal-overlay" onclick="maybeClose(event)">
   <div class="modal" id="modal">
@@ -498,6 +525,10 @@ footer span{color:#888}
       <button class="modal-close" onclick="closeModal()" aria-label="Fermer">✕</button>
       <div class="modal-event-title" id="modal-title">Titre de l'événement</div>
       <div class="modal-event-sub" id="modal-sub">Sous-titre</div>
+      <a id="modal-ics-link" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#bbb;text-decoration:none;margin-top:8px">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Ajouter à mon calendrier
+      </a>
       <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:25%"></div></div>
       <div class="progress-steps">
         <span class="progress-step active" id="ps1">01 · Identité</span>
@@ -1458,6 +1489,7 @@ function openModal(eventId) {
   registrationSubmitting = false;
   document.getElementById('modal-title').textContent = currentEvent.title;
   document.getElementById('modal-sub').textContent   = currentEvent.sub;
+  document.getElementById('modal-ics-link').href = CONFIG.API_URL + '/api/events/' + encodeURIComponent(eventId) + '/ics';
   ['f-nom','f-prenom','f-tel','f-email','f-licence','f-regime','f-message'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
@@ -1506,9 +1538,89 @@ function maybeClosePosterLightbox(e) {
   if (e.target === document.getElementById('poster-lightbox-overlay')) closePosterLightbox();
 }
 
+/* ── Liste d'attente (événement complet) ────────────── */
+let waitlistEventId = null;
+
+function openWaitlistModal(eventId) {
+  waitlistEventId = eventId;
+  const ev = events[eventId];
+  document.getElementById('waitlist-modal-title').textContent =
+    ev ? `Liste d'attente — ${ev.title}` : "Liste d'attente";
+  ['wl-nom', 'wl-prenom', 'wl-email', 'wl-tel'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const msg = document.getElementById('waitlist-msg');
+  msg.style.display = 'none';
+  const btn = document.getElementById('waitlist-submit-btn');
+  btn.disabled = false;
+  btn.textContent = "Rejoindre la liste d'attente";
+  document.getElementById('waitlist-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeWaitlistModal() {
+  document.getElementById('waitlist-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  waitlistEventId = null;
+}
+
+function maybeCloseWaitlist(e) {
+  if (e.target === document.getElementById('waitlist-overlay')) closeWaitlistModal();
+}
+
+function showWaitlistMessage(text, kind) {
+  const msg = document.getElementById('waitlist-msg');
+  msg.textContent = text;
+  msg.style.display = 'block';
+  msg.style.background = kind === 'error' ? '#fdecea' : '#e9f7ee';
+  msg.style.color = kind === 'error' ? '#8a1c1c' : '#1a7a3c';
+}
+
+async function submitWaitlist() {
+  if (!waitlistEventId) return;
+  const nom = document.getElementById('wl-nom').value.trim();
+  const prenom = document.getElementById('wl-prenom').value.trim();
+  const email = document.getElementById('wl-email').value.trim();
+  const telephone = document.getElementById('wl-tel').value.trim();
+
+  if (!nom || !prenom || !email) {
+    showWaitlistMessage('Merci de renseigner au minimum votre nom, prénom et email.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('waitlist-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours…';
+
+  try {
+    const r = await fetch(CONFIG.API_URL + '/api/waitlist', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: waitlistEventId, nom, prenom, email, telephone: telephone || undefined }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showWaitlistMessage(data.error || "Impossible de vous inscrire sur la liste d'attente pour le moment.", 'error');
+      btn.disabled = false;
+      btn.textContent = "Rejoindre la liste d'attente";
+      return;
+    }
+    showWaitlistMessage('Inscription enregistrée ! Vous serez averti·e par email dès qu\'une place se libère.', 'success');
+    btn.textContent = 'Inscrit·e sur la liste';
+  } catch (e) {
+    showWaitlistMessage('Erreur réseau, merci de réessayer.', 'error');
+    btn.disabled = false;
+    btn.textContent = "Rejoindre la liste d'attente";
+  }
+}
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('poster-lightbox-overlay')?.classList.contains('open')) {
     closePosterLightbox();
+  }
+  if (e.key === 'Escape' && document.getElementById('waitlist-overlay')?.classList.contains('open')) {
+    closeWaitlistModal();
   }
 });
 
@@ -2497,12 +2609,16 @@ function buildCard(ev) {
                        :`${ev.spots} places`;
   const spotsClass=sold?'full':ferme?'full':low?'low':'';
   const priceTxt =ev.price===0?'<span class="free">Gratuit</span>':`<sup>€</sup>${ev.price}`;
-  const btnClass =disabled?'disabled':ev.price===0?'outline':'primary';
-  const btnTxt   =sold?'Complet':ferme?'Inscriptions fermées':"S'inscrire →";
+  // Un événement complet reste cliquable — on propose la liste d'attente au
+  // lieu de l'inscription (cf. openWaitlistModal). Seul "ferme" (inscriptions
+  // volontairement closes par l'admin) reste totalement désactivé.
+  const btnClass =ferme?'disabled':sold?'outline':ev.price===0?'outline':'primary';
+  const btnTxt   =sold?"Liste d'attente":ferme?'Inscriptions fermées':"S'inscrire →";
   const featured =ev.featured?' featured':'';
-  const opacity  =disabled?' style="opacity:.6;pointer-events:none;"':'';
-  const clickCard=disabled?'':` onclick="openModal('${ev.id}')"`;
-  const clickBtn =disabled?'':` onclick="event.stopPropagation();openModal('${ev.id}')"`;
+  const opacity  =ferme?' style="opacity:.6;pointer-events:none;"':'';
+  const openFn   =sold?'openWaitlistModal':'openModal';
+  const clickCard=ferme?'':` onclick="${openFn}('${ev.id}')"`;
+  const clickBtn =ferme?'':` onclick="event.stopPropagation();${openFn}('${ev.id}')"`;
   const d        =fmtDate(ev.dateStart,ev.dateEnd);
   const horaires =ev.timeStart&&ev.timeEnd
     ? `<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${ev.timeStart} – ${ev.timeEnd}</div>`
