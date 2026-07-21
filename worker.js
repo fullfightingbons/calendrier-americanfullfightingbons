@@ -693,6 +693,48 @@ function normalizePdfText(value) {
     .trim();
 }
 
+// Largeurs Helvetica (metriques AFM Adobe standard, 1/1000 em). Ce
+// generateur de facture est independant de celui de gestion/boutique (pas
+// de module partage) et positionne tout le texte a des coordonnees fixes,
+// sans aucune mesure de largeur : un nom compose ou un email un peu long
+// (ex: "jean-baptiste.delarochefoucauld-montbazon@...") ecrasait
+// completement le bloc voisin (jusqu'a 50% de depassement constate en
+// test). On ajoute une troncature basee sur la largeur reelle du texte
+// plutot que sur un nombre de caracteres.
+const HELV_WIDTHS = {
+  ' ': 278, '!': 278, '"': 355, '#': 556, '$': 556, '%': 889, '&': 667, "'": 191,
+  '(': 333, ')': 333, '*': 389, '+': 584, ',': 278, '-': 333, '.': 278, '/': 278,
+  '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556, '6': 556, '7': 556, '8': 556, '9': 556,
+  ':': 278, ';': 278, '<': 584, '=': 584, '>': 584, '?': 556, '@': 1015,
+  'A': 667, 'B': 667, 'C': 722, 'D': 722, 'E': 667, 'F': 611, 'G': 778, 'H': 722, 'I': 278, 'J': 500,
+  'K': 667, 'L': 556, 'M': 833, 'N': 722, 'O': 778, 'P': 667, 'Q': 778, 'R': 722, 'S': 667, 'T': 611,
+  'U': 722, 'V': 667, 'W': 944, 'X': 667, 'Y': 667, 'Z': 611,
+  'a': 556, 'b': 556, 'c': 500, 'd': 556, 'e': 556, 'f': 278, 'g': 556, 'h': 556, 'i': 222, 'j': 222,
+  'k': 500, 'l': 222, 'm': 833, 'n': 556, 'o': 556, 'p': 556, 'q': 556, 'r': 333, 's': 500, 't': 278,
+  'u': 556, 'v': 500, 'w': 722, 'x': 500, 'y': 500, 'z': 500, '°': 400,
+};
+const HELV_BOLD_WIDTHS = { ...HELV_WIDTHS,
+  'A': 722, 'B': 722, 'C': 722, 'D': 722, 'F': 611, 'G': 778, 'K': 722, 'L': 611, 'N': 722, 'P': 667,
+  'R': 722, 'S': 667, 'T': 611, 'U': 722, 'a': 556, 'b': 611, 'c': 556, 'd': 611, 'e': 556, 'f': 333,
+  'g': 611, 'h': 611, 'i': 278, 'j': 278, 'k': 556, 'l': 278, 'n': 611, 'o': 611, 'p': 611, 'q': 611,
+  's': 556, 't': 333, 'u': 611, 'w': 778,
+};
+function measurePdfTextWidth(str, font, fontSize) {
+  const table = font === 'F2' ? HELV_BOLD_WIDTHS : HELV_WIDTHS;
+  let units = 0;
+  for (const ch of str) units += table[ch] ?? 556;
+  return (units / 1000) * fontSize;
+}
+// Tronque avec "..." si le texte depasse maxWPt a la police/taille donnee.
+function truncateToWidth(str, font, fontSize, maxWPt) {
+  if (measurePdfTextWidth(str, font, fontSize) <= maxWPt) return str;
+  let s = str;
+  while (s.length > 1 && measurePdfTextWidth(s + '...', font, fontSize) > maxWPt) {
+    s = s.slice(0, -1);
+  }
+  return s + '...';
+}
+
 function pdfEscape(text) {
   return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
@@ -747,9 +789,11 @@ function buildEventInvoicePdfBase64(registration, event) {
     year: 'numeric', month: '2-digit', day: '2-digit',
   });
 
-  const customerName = normalizePdfText(`${registration.prenom || ''} ${registration.nom || ''}`.trim());
-  const customerEmail = normalizePdfText(registration.email);
-  const customerPhone = normalizePdfText(registration.telephone || '');
+  const CLIENT_BOX_W = 242 - 24; // boite 242pt, marge gauche 14pt + un peu de respiration a droite
+  const customerName = truncateToWidth(
+    normalizePdfText(`${registration.prenom || ''} ${registration.nom || ''}`.trim()), 'F1', 11, CLIENT_BOX_W);
+  const customerEmail = truncateToWidth(normalizePdfText(registration.email), 'F1', 10, CLIENT_BOX_W);
+  const customerPhone = truncateToWidth(normalizePdfText(registration.telephone || ''), 'F1', 10, CLIENT_BOX_W);
   const status = normalizePdfText(registration.paiement_status === 'gratuit' ? 'Gratuit' : 'Payee');
   const price = Number(event.price) || 0;
   const totalText = `${price.toFixed(2)} EUR`;
@@ -825,7 +869,11 @@ function buildEventInvoicePdfBase64(registration, event) {
   text(486, 628, 'Total', 'F2', 11);
 
   let y = 610;
-  const label = normalizePdfText(event.title).slice(0, 52);
+  // "Evenement" va de x=58 a x=360 (colonne Qte) : troncature sur la
+  // largeur reelle plutot que sur un nombre de caracteres fixe (52 etait
+  // une approximation qui pouvait encore deborder avec beaucoup de
+  // majuscules/chiffres).
+  const label = truncateToWidth(normalizePdfText(event.title), 'F1', 10, 360 - (left + 12) - 6);
   text(left + 12, y, label, 'F1', 10);
   text(364, y, '1', 'F1', 10);
   text(418, y, totalText, 'F1', 10);
@@ -845,7 +893,11 @@ function buildEventInvoicePdfBase64(registration, event) {
   rect(308, 124, 241, 54, [0.97, 0.97, 0.97], [0.88, 0.88, 0.88], 1);
   text(320, 162, 'CONTACT', 'F2', 11);
   text(320, 146, `Email : ${clubEmail}`, 'F1', 9);
-  text(320, 132, `Club : ${clubEmail} | ${clubSite}`, 'F1', 9);
+  // L'email etait duplique sur cette 2e ligne ("Club : email | site"),
+  // ce qui la faisait deborder d'environ 15mm hors de son cadre sur
+  // TOUTES les factures (pas seulement en cas de donnees longues) : le
+  // site suffit, l'email est deja affiche juste au-dessus.
+  text(320, 132, truncateToWidth(`Site : ${clubSite}`, 'F1', 9, 549 - 320 - 6), 'F1', 9);
 
   text(left, 96, 'Association loi 1901 - TVA non applicable, art. 293 B du CGI', 'F1', 9);
   text(left, 80, 'Facture generee automatiquement lors de la confirmation de l\'inscription.', 'F1', 9);

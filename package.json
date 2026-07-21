@@ -3,8 +3,8 @@
 	"description": "Calendrier des cours, stages et inscriptions du club AFFBC — Worker Cloudflare + D1, sert calendrier.americanfullfightingbons.fr.",
 	"private": true,
 	"devDependencies": {
-		"typescript": "5.9.3",
-		"vitest": "^2.1.4",
+		"typescript": "^5.9.3",
+		"vitest": "^2.1.9",
 		"wrangler": "4.97.0"
 	},
 	"scripts": {
