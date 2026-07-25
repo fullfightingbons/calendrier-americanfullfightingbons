@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS events (
   type          TEXT    NOT NULL               -- stage | competition | seminaire | grade
                 CHECK (type IN ('stage','competition','seminaire','grade')),
   status        TEXT    NOT NULL DEFAULT 'disponible'
-                CHECK (status IN ('disponible','complet')),
+                CHECK (status IN ('disponible','complet','ferme')),
   date_start    TEXT    NOT NULL,              -- ISO-8601 YYYY-MM-DD
   date_end      TEXT,                          -- NULL si événement 1 jour
   time_start    TEXT,                          -- HH:MM ou NULL
@@ -81,10 +81,16 @@ CREATE TABLE IF NOT EXISTS registrations (
                   CHECK (paiement_status IN ('en_attente','paye','gratuit','annule')),
   helloasso_ref   TEXT,                        -- référence HelloAsso si applicable
 
+  -- ── Rappel J-1 et auto-annulation publique (cf. migration 0008) ─
+  rappel_envoye_at TEXT,                        -- horodatage du rappel J-1 déjà envoyé
+  cancel_token     TEXT,                        -- jeton "annuler mon inscription" (lien email)
+
   -- ── Méta ────────────────────────────────────────────────────
   created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_reg_cancel_token ON registrations(cancel_token);
 
 CREATE INDEX IF NOT EXISTS idx_reg_event_id ON registrations(event_id);
 CREATE INDEX IF NOT EXISTS idx_reg_email    ON registrations(email);
