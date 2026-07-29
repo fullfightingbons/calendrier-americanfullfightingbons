@@ -1031,6 +1031,16 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// ── Cloudflare Image Transformations ──────────────────────────
+// Les affiches sont servies par /posters/... sur ce même zone, en public
+// (pas d'auth) : cas sûr pour laisser Cloudflare aller chercher la source.
+function posterSrcset(posterUrl, widths) {
+  if (!posterUrl) return null;
+  return widths.map(function(w) {
+    return CONFIG.API_URL + '/cdn-cgi/image/fit=scale-down,format=auto,onerror=redirect,width=' + w + posterUrl + ' ' + w + 'w';
+  }).join(', ');
+}
+
 /* ────────────────────────────────────────────────────────
    NOTIFICATIONS (toasts) — remplace window.alert() natif
    ──────────────────────────────────────────────────────── */
@@ -2379,7 +2389,7 @@ function renderAdminList() {
     const rowClass  =ev.status==='complet'?' sold-out':ev.status==='ferme'?' sold-out':'';
     return `<div class="admin-event-row${rowClass}">
       ${ev.posterUrl
-        ? `<img class="admin-event-thumb" src="${CONFIG.API_URL+ev.posterUrl}" alt="">`
+        ? `<img class="admin-event-thumb" src="${CONFIG.API_URL}/cdn-cgi/image/fit=scale-down,format=auto,onerror=redirect,width=100${ev.posterUrl}" alt="">`
         : `<div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>`}
       <div class="admin-event-info">
         <div class="admin-event-name">${escapeHtml(ev.title)}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}</div>
@@ -2678,7 +2688,7 @@ function buildCard(ev) {
     ? `<div class="card-meta-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${ev.timeStart} – ${ev.timeEnd}</div>`
     : '';
   return `<div class="event-card${featured}" data-type="${ev.type}${ev.price===0?' gratuit':''}"${clickCard}${opacity}>
-    ${ev.posterUrl ? `<img class="card-poster" src="${CONFIG.API_URL+ev.posterUrl}" alt="${escapeHtml(ev.title)}" loading="lazy" onclick="event.stopPropagation();openPosterLightbox('${ev.id}')">` : ''}
+    ${ev.posterUrl ? `<img class="card-poster" src="${CONFIG.API_URL+ev.posterUrl}" srcset="${posterSrcset(ev.posterUrl, [300,600,900])}" sizes="(max-width: 560px) 100vw, (max-width: 860px) 50vw, 300px" alt="${escapeHtml(ev.title)}" loading="lazy" onclick="event.stopPropagation();openPosterLightbox('${ev.id}')">` : ''}
     <div class="card-badge-row">${typeBadge}<span class="card-spots ${spotsClass}">${spotsTxt}</span></div>
     <div class="card-body">
       <div class="card-title">${escapeHtml(ev.title)}</div>
