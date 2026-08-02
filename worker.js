@@ -1267,16 +1267,12 @@ function icsDateStamp(dateStr, timeStr) {
   return { value: `${compact}T${compactTime}`, allDay: false };
 }
 
-function buildEventIcs(ev) {
+function buildVEventLines(ev) {
   const uid = `event-${ev.id}@americanfullfightingbons.fr`;
   const dtStart = icsDateStamp(ev.date_start, ev.time_start);
   const dtEnd = icsDateStamp(ev.date_end || ev.date_start, ev.time_end || ev.time_start);
   const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//AFFBC//Calendrier//FR',
-    'CALSCALE:GREGORIAN',
+  return [
     'BEGIN:VEVENT',
     `UID:${uid}`,
     `DTSTAMP:${now}`,
@@ -1286,8 +1282,36 @@ function buildEventIcs(ev) {
     `DESCRIPTION:${icsEscape(ev.sub || '')}`,
     `LOCATION:${icsEscape(ev.lieu || '')}`,
     'END:VEVENT',
+  ];
+}
+
+function buildEventIcs(ev) {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//AFFBC//Calendrier//FR',
+    'CALSCALE:GREGORIAN',
+    ...buildVEventLines(ev),
     'END:VCALENDAR',
   ];
+  return lines.join('\r\n');
+}
+
+// ── Flux calendrier abonnable (webcal) — un membre ajoute une fois cette
+// URL à son agenda, qui se met alors à jour tout seul à chaque nouvelle
+// inscription, sans fichier à retélécharger à chaque fois.
+function buildMemberCalendarIcs(events) {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//AFFBC//Calendrier membre//FR',
+    'CALSCALE:GREGORIAN',
+    'X-WR-CALNAME:AFFBC — Mes évènements',
+    'REFRESH-INTERVAL;VALUE=DURATION:P1D',
+    'X-PUBLISHED-TTL:P1D',
+  ];
+  for (const ev of events) lines.push(...buildVEventLines(ev));
+  lines.push('END:VCALENDAR');
   return lines.join('\r\n');
 }
 
@@ -1800,6 +1824,63 @@ export default {
             if (poster_key) await deleteEventPosterKey(env, poster_key);
           }
           return json({ deleted_events: seriesEvents.length, archived_registrations: archivedRegistrations });
+        }
+
+        // POST /api/events/series/:seriesId [public] — inscription en une
+        // fois à toutes les occurrences ouvertes d'une série (ex: un stage
+        // sur plusieurs jours ou un cycle de cours). Réutilise
+        // createRegistrationRow + sendConfirmationEmails occurrence par
+        // occurrence — donc un email de confirmation par date (avec son
+        // propre .ics et son propre lien d'annulation, comme une inscription
+        // normale), plutôt qu'un email combiné qui perdrait cette souplesse
+        // par-date. Best-effort : une occurrence déjà complète ou déjà
+        // réservée par cet email n'empêche pas les autres de s'inscrire.
+        if (method === 'POST' && resId === 'series' && subRes) {
+          const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+          if (isRateLimited(clientIp, 10, 60_000)) {
+            return err('Trop de requêtes. Veuillez patienter avant de réessayer.', 429);
+          }
+
+          const { results: seriesEvents } = await env.DB.prepare(
+            `SELECT id FROM events
+             WHERE series_id = ? AND date_start >= date('now') AND status != 'ferme' AND is_grade = 0
+             ORDER BY date_start ASC`
+          ).bind(subRes).all();
+          if (!seriesEvents.length) return err('Aucune occurrence ouverte pour cette série', 404);
+
+          const body = await request.json();
+          const registered = [];
+          const skipped = [];
+          for (const { id: eventId } of seriesEvents) {
+            let result;
+            try {
+              result = await createRegistrationRow(env, { ...body, event_id: eventId });
+            } catch (e) {
+              skipped.push({ event_id: eventId, reason: e instanceof ApiError ? e.message : 'Erreur' });
+              continue;
+            }
+            if (!result.ok) {
+              skipped.push({ event_id: eventId, reason: 'Déjà inscrit·e ou événement complet' });
+              continue;
+            }
+            const { id, ev, paiementStatus, normalizedEmail, bodyUsed, cancelToken } = result;
+            const regData = {
+              nom: bodyUsed.nom, prenom: bodyUsed.prenom, email: normalizedEmail,
+              telephone: bodyUsed.telephone, date_naissance: bodyUsed.date_naissance,
+              categorie: bodyUsed.categorie ?? null, niveau: bodyUsed.niveau ?? null,
+              licence_ffk: bodyUsed.licence_ffk ?? null, message: bodyUsed.message ?? null,
+              is_mineur: bodyUsed.is_mineur ? 1 : 0,
+              parent_nom: bodyUsed.parent_nom ?? null, parent_prenom: bodyUsed.parent_prenom ?? null, parent_tel: bodyUsed.parent_tel ?? null,
+              paiement_status: paiementStatus,
+            };
+            await sendConfirmationEmails(env, { reg: regData, ev, cancelToken });
+            registered.push({ event_id: eventId, id, paiement_status: paiementStatus, montant: ev.price });
+          }
+
+          if (!registered.length) {
+            return json({ error: 'Aucune inscription possible (déjà inscrit·e ou complet sur toutes les dates)', registered, skipped }, 409);
+          }
+          return json({ registered, skipped, series_id: subRes });
         }
 
         if (method === 'GET' && resId) {
@@ -2464,6 +2545,83 @@ export default {
 
         return new Response(JSON.stringify({ data: results || [], error: null }), {
           headers: securityHeaders({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }),
+        });
+      }
+
+      // ── POST /api/member/calendar-token — espace membre ───────────────────
+      // Retourne le jeton persistant du membre (le crée s'il n'existe pas
+      // encore). Même vérification de session que /api/member/registrations.
+      if (method === 'POST' && path === '/api/member/calendar-token') {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+        if (!token) return err('Non autorisé', 401);
+        let session;
+        try {
+          session = await parseSessionToken(token, env);
+        } catch (e) {
+          console.error('[member/calendar-token] SESSION_SECRET absent ou invalide', e);
+          return err('Service momentanément indisponible', 503);
+        }
+        if (!session || session.kind !== 'member' || !session.email || Number(session.expiresAt) < Date.now()) {
+          return err('Session invalide ou expirée', 401);
+        }
+        const email = String(session.email).trim().toLowerCase();
+        let row = await env.DB.prepare('SELECT token FROM member_calendar_tokens WHERE email = ?').bind(email).first();
+        if (!row) {
+          const newToken = crypto.randomUUID().replace(/-/g, '');
+          await env.DB.prepare('INSERT INTO member_calendar_tokens (email, token) VALUES (?, ?)').bind(email, newToken).run();
+          row = { token: newToken };
+        }
+        return json({ token: row.token, feed_url: `${CLUB_SITE_ORIGIN}/api/member/calendar.ics?token=${row.token}` });
+      }
+
+      // ── DELETE /api/member/calendar-token — espace membre ─────────────────
+      // Régénère le jeton (invalide l'ancien lien, ex. si partagé par erreur).
+      if (method === 'DELETE' && path === '/api/member/calendar-token') {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+        if (!token) return err('Non autorisé', 401);
+        let session;
+        try {
+          session = await parseSessionToken(token, env);
+        } catch (e) {
+          console.error('[member/calendar-token:regenerate] SESSION_SECRET absent ou invalide', e);
+          return err('Service momentanément indisponible', 503);
+        }
+        if (!session || session.kind !== 'member' || !session.email || Number(session.expiresAt) < Date.now()) {
+          return err('Session invalide ou expirée', 401);
+        }
+        const email = String(session.email).trim().toLowerCase();
+        const newToken = crypto.randomUUID().replace(/-/g, '');
+        await env.DB.prepare(
+          'INSERT INTO member_calendar_tokens (email, token) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET token = excluded.token'
+        ).bind(email, newToken).run();
+        return json({ token: newToken, feed_url: `${CLUB_SITE_ORIGIN}/api/member/calendar.ics?token=${newToken}` });
+      }
+
+      // ── GET /api/member/calendar.ics [public, sécurisé par jeton] ─────────
+      // Flux ICS abonnable (webcal). Pas de session ici : un agenda (Google
+      // Calendar, iOS...) rappelle cette URL tout seul, sans navigateur ni
+      // en-tête Authorization possible — la sécurité vient uniquement du
+      // jeton, imprévisible et propre à chaque adhérent.
+      if (method === 'GET' && path === '/api/member/calendar.ics') {
+        const token = url.searchParams.get('token') || '';
+        if (!token) return err('Jeton manquant', 400);
+        const row = await env.DB.prepare('SELECT email FROM member_calendar_tokens WHERE token = ?').bind(token).first();
+        if (!row) return err('Lien invalide ou expiré', 404);
+        const { results } = await env.DB.prepare(`
+          SELECT e.id, e.title, e.sub, e.date_start, e.date_end, e.time_start, e.time_end, e.lieu
+          FROM registrations r
+          JOIN events e ON e.id = r.event_id
+          WHERE LOWER(TRIM(r.email)) = ? AND r.paiement_status IN ('paye', 'gratuit')
+          ORDER BY e.date_start ASC
+        `).bind(row.email).all();
+        return new Response(buildMemberCalendarIcs(results || []), {
+          headers: securityHeaders({
+            'Content-Type': 'text/calendar; charset=utf-8',
+            'Content-Disposition': 'inline; filename="affbc-mes-evenements.ics"',
+            'Cache-Control': 'public, max-age=3600',
+          }),
         });
       }
 

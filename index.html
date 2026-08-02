@@ -147,6 +147,9 @@ body{overflow-x:hidden}
 .modal-close:hover{color:white}
 .modal-event-title{font-family:var(--font-display);font-size:28px;letter-spacing:1px;line-height:1.1}
 .modal-event-sub{font-size:13px;color:#999;margin-top:4px}
+.series-toggle{display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding:10px 12px;background:var(--red-bg);border:1px solid var(--red-light);border-radius:var(--radius);font-size:13px;color:var(--ink);cursor:pointer}
+.series-toggle input{margin-top:2px;flex-shrink:0}
+.series-note{margin-top:10px;padding:10px 12px;background:#f5f5f5;border-radius:var(--radius);font-size:12px;color:#777}
 .progress-bar{background:#1a1a1a;height:4px;margin-top:14px;border-radius:2px;overflow:hidden}
 .progress-fill{height:100%;background:var(--red);border-radius:2px;transition:width .3s}
 .progress-steps{display:flex;justify-content:space-between;margin-top:6px}
@@ -529,6 +532,7 @@ footer span{color:#888}
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         Ajouter à mon calendrier
       </a>
+      <div id="modal-series-info"></div>
       <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:25%"></div></div>
       <div class="progress-steps">
         <span class="progress-step active" id="ps1">01 · Identité</span>
@@ -1463,6 +1467,7 @@ function normalizeEvent(ev) {
     spots:      ev.spots_left,  spotsTotal: ev.spots_total,
     featured:   !!ev.featured,  isGrade:    !!ev.is_grade,
     posterUrl:  ev.poster_url || null,
+    seriesId:   ev.series_id || null,
   };
 }
 
@@ -1539,6 +1544,36 @@ let pendingRegId = null;   // ID de l'inscription créée en base avant le check
 let registrationSubmitting = false;
 let defaultModalBodyHtml = '';
 let defaultModalFooterDisplay = '';
+let registerWholeSeries = false;   // choix "s'inscrire à toutes les dates" (séries gratuites uniquement)
+let currentSeriesSiblingIds = [];  // occurrences à venir de la série (hors l'évènement courant)
+
+// Une série n'a de sens à proposer en bloc que si elle est gratuite : le
+// paiement HelloAsso redirige le navigateur vers un seul évènement à la
+// fois, donc pas de "un clic" possible pour du payant sans reprendre toute
+// la logique de paiement (risqué à faire à la légère avec de l'argent réel).
+function renderSeriesInfo(ev, eventId) {
+  registerWholeSeries = false;
+  currentSeriesSiblingIds = [];
+  const box = document.getElementById('modal-series-info');
+  if (!ev.seriesId) { box.innerHTML = ''; return; }
+  const today = new Date().toISOString().slice(0, 10);
+  const siblings = adminEvents.filter(e =>
+    e.seriesId === ev.seriesId && e.id !== eventId && !e.isGrade &&
+    e.status !== 'ferme' && e.dateStart >= today
+  );
+  if (siblings.length === 0) { box.innerHTML = ''; return; }
+  currentSeriesSiblingIds = siblings.map(s => s.id);
+  const count = siblings.length + 1;
+  if (ev.price === 0) {
+    box.innerHTML = `
+      <label class="series-toggle">
+        <input type="checkbox" id="series-toggle-input" onchange="registerWholeSeries=this.checked">
+        Fait partie d'une série de ${count} dates — s'inscrire à toutes en une fois
+      </label>`;
+  } else {
+    box.innerHTML = `<div class="series-note">Fait partie d'une série de ${count} dates. Cette inscription ne concerne que cette date ; les autres s'inscrivent séparément.</div>`;
+  }
+}
 
 function openModal(eventId) {
   if (!defaultModalBodyHtml) {
@@ -1554,6 +1589,7 @@ function openModal(eventId) {
   document.getElementById('modal-title').textContent = currentEvent.title;
   document.getElementById('modal-sub').textContent   = currentEvent.sub;
   document.getElementById('modal-ics-link').href = CONFIG.API_URL + '/api/events/' + encodeURIComponent(eventId) + '/ics';
+  renderSeriesInfo(currentEvent, eventId);
   ['f-nom','f-prenom','f-tel','f-email','f-licence','f-regime','f-message'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
@@ -1865,6 +1901,11 @@ function showSuccess() {
   const prenom = document.getElementById('f-prenom').value||'';
   const email  = document.getElementById('f-email').value||'';
 
+  if (registerWholeSeries && currentEvent.seriesId) {
+    showSeriesSuccess(nom, prenom, email, payload);
+    return;
+  }
+
   // Enregistrement en base (gratuit → confirmé immédiatement)
   API.post('/api/registrations', payload)
     .then(r => {
@@ -1899,6 +1940,44 @@ function showSuccess() {
       }
       alert('Erreur lors de l\'enregistrement de l\'inscription : ' + e.message);
       console.warn('Erreur enregistrement:', e);
+    });
+}
+
+/* ── Inscription groupée à toute une série (évènements gratuits) ── */
+function showSeriesSuccess(nom, prenom, email, payload) {
+  const btnNext = document.getElementById('btn-next');
+  API.post('/api/events/series/' + encodeURIComponent(currentEvent.seriesId), payload)
+    .then(r => {
+      const total = (r.registered?.length || 0) + (r.skipped?.length || 0);
+      const okCount = r.registered?.length || 0;
+      const skipRows = (r.skipped || []).map(s =>
+        `<div class="recap-row"><span class="recap-label">Ignorée</span><span>${escapeHtml(s.reason)}</span></div>`
+      ).join('');
+      document.querySelector('.modal-body').innerHTML=`
+        <div class="success-screen">
+          <div class="success-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="success-title">INSCRIPTION VALIDÉE</div>
+          <p class="success-sub">Inscrit·e à <strong>${okCount} date${okCount>1?'s':''}</strong> sur ${total} sur la série <strong>${escapeHtml(currentEvent.title)}</strong>. Un email récapitulatif a été envoyé pour chaque date à <strong>${escapeHtml(email)}</strong>.</p>
+          <div class="recap-card">
+            <div class="recap-row"><span class="recap-label">Participant</span><span>${escapeHtml(nom)} ${escapeHtml(prenom)}</span></div>
+            <div class="recap-row"><span class="recap-label">Statut</span><span style="color:#27AE60;font-weight:600">✓ ${okCount} confirmée${okCount>1?'s':''}</span></div>
+            ${skipRows}
+          </div>
+          <button class="btn-inscr primary" style="width:100%;padding:12px" onclick="closeModal()">Fermer</button>
+        </div>
+      `;
+      document.querySelector('.modal-footer').style.display='none';
+      document.getElementById('progress-fill').style.width='100%';
+      loadHeroCalendar();
+    })
+    .catch(e => {
+      registrationSubmitting = false;
+      if (btnNext) {
+        btnNext.disabled = false;
+        btnNext.textContent = 'Confirmer l\'inscription ✓';
+      }
+      alert('Erreur lors de l\'enregistrement de l\'inscription : ' + e.message);
+      console.warn('Erreur enregistrement série:', e);
     });
 }
 
