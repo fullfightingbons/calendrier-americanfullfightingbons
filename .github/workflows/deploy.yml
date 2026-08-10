@@ -20,17 +20,27 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: "npm"
 
-      - name: Install Wrangler
-        run: npm install -g wrangler
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test --if-present
+
+      - name: Dry-run deploy
+        run: npx wrangler deploy --dry-run
 
       - name: Apply schema.sql to D1 (production)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          wrangler d1 execute calendrier-americanfullfightingbonsdb \
+          npx wrangler d1 execute calendrier-americanfullfightingbonsdb \
             --file=schema.sql \
             --remote
 
@@ -47,7 +57,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          wrangler d1 migrations apply DB --remote
+          npx wrangler d1 migrations apply DB --remote
 
   # ══════════════════════════════════════════════════════════════
   # JOB 2 : Déployer le Worker
@@ -63,10 +73,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: "npm"
 
-      - name: Install Wrangler
-        run: npm install -g wrangler
+      - name: Install dependencies
+        run: npm ci
 
       - name: Deploy Worker to Cloudflare
         uses: cloudflare/wrangler-action@v3
@@ -83,7 +94,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           printf '%s' "${{ secrets.CF_ADMIN_TOKEN }}" | \
-            wrangler secret put ADMIN_TOKEN \
+            npx wrangler secret put ADMIN_TOKEN \
               --name calendrier-americanfullfightingbons
 
       # CORRECTIF : cette étape manquait. Sans SESSION_SECRET posé sur le
@@ -99,5 +110,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           printf '%s' "${{ secrets.CF_SESSION_SECRET }}" | \
-            wrangler secret put SESSION_SECRET \
+            npx wrangler secret put SESSION_SECRET \
               --name calendrier-americanfullfightingbons
