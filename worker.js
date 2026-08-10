@@ -1999,6 +1999,20 @@ export default {
       //  ARCHIVES — inscriptions des événements supprimés
       // ══════════════════════════════════════════════════════════
       if (resource === 'archives') {
+
+        // GET /api/archives/public [public] — projection limitée, pour la
+        // page "événements passés" (cf. avis publics ci-dessous) : permet
+        // de retrouver un événement au-delà des 5 jours avant purge
+        // (purgeExpiredEvents) sans exposer d'inscriptions/paiements.
+        // Placé AVANT requireAdmin() ci-dessous, qui gate tout le reste de
+        // cette ressource.
+        if (method === 'GET' && resId === 'public') {
+          const { results } = await env.DB.prepare(
+            `SELECT event_id, title, type, date_start, date_end, lieu FROM event_archives ORDER BY date_start DESC LIMIT 200`
+          ).all();
+          return json(results);
+        }
+
         await requireAdmin();
 
         // GET /api/archives [admin] — liste des archives (sans le JSON complet)
@@ -2329,8 +2343,15 @@ export default {
           }
           const note = Number(body.note);
           if (!Number.isInteger(note) || note < 1 || note > 5) return err('note doit être un entier entre 1 et 5');
+          // L'événement peut avoir déjà été archivé (purgeExpiredEvents, 5
+          // jours après la fin) au moment où quelqu'un pense à déposer un
+          // avis — on accepte donc aussi un event_id qui n'existe plus que
+          // dans event_archives, pas seulement dans events.
           const ev = await env.DB.prepare(`SELECT id FROM events WHERE id = ?`).bind(body.event_id).first();
-          if (!ev) return err('Événement introuvable', 404);
+          if (!ev) {
+            const archived = await env.DB.prepare(`SELECT event_id FROM event_archives WHERE event_id = ?`).bind(body.event_id).first();
+            if (!archived) return err('Événement introuvable', 404);
+          }
 
           const info = await env.DB.prepare(`
             INSERT INTO event_reviews (event_id, nom, email, note, commentaire)

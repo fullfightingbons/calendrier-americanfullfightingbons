@@ -288,6 +288,11 @@ footer span{color:#888}
 .admin-empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
 .admin-empty-icon{font-size:48px;margin-bottom:1rem;opacity:.5}
 .admin-spots-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px}
+.admin-series-badge{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;background:#eef1fb;color:#3d4a9c;white-space:nowrap}
+.review-star-picker{display:flex;gap:4px;font-size:30px;line-height:1;cursor:pointer;user-select:none}
+.review-star{color:#d9d9d9;transition:color .1s}
+.review-star.filled{color:#f0a500}
+.review-stars-static{color:#f0a500;font-size:14px;letter-spacing:1px}
 .spots-ok{background:#EAFAF1;color:#1E8449}
 .spots-low{background:#FEF9E7;color:#B7770D}
 .spots-full{background:#f5f5f5;color:#999}
@@ -487,6 +492,44 @@ footer span{color:#888}
     <div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted)">
       <div style="font-size:32px;margin-bottom:8px">📅</div>
       Chargement des événements…
+    </div>
+  </div>
+</div>
+
+<div class="events-section" id="reviews-section">
+  <div class="section-label">Avis sur nos événements passés</div>
+  <div style="max-width:640px">
+    <div class="form-group" id="review-select-group">
+      <label>Choisir un événement passé</label>
+      <select id="review-event-select" onchange="onReviewEventSelected()">
+        <option value="">— Sélectionner —</option>
+      </select>
+    </div>
+    <div id="review-empty" style="display:none;color:var(--muted);font-size:14px">Aucun événement passé pour le moment.</div>
+    <div id="review-content" style="display:none">
+      <div id="review-summary" style="margin-bottom:1rem"></div>
+      <div id="review-list"></div>
+      <div id="review-form-wrap" style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">
+        <div style="font-weight:700;font-size:1rem;margin-bottom:.9rem">Laisser un avis</div>
+        <div class="form-group">
+          <label>Votre note <span class="req">*</span></label>
+          <div id="review-star-picker" class="review-star-picker"></div>
+        </div>
+        <div class="form-group">
+          <label>Nom <span class="req">*</span></label>
+          <input type="text" id="review-nom" placeholder="Votre nom">
+        </div>
+        <div class="form-group">
+          <label>Email (optionnel, jamais affiché publiquement)</label>
+          <input type="email" id="review-email" placeholder="vous@example.fr">
+        </div>
+        <div class="form-group">
+          <label>Commentaire (optionnel)</label>
+          <textarea id="review-commentaire" rows="3" placeholder="Votre expérience à cet événement…" style="width:100%;padding:.7rem .9rem;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+        <div id="review-msg" style="display:none;font-size:.85rem;padding:.6rem .8rem;border-radius:8px;margin-bottom:1rem"></div>
+        <button class="btn-inscr primary" onclick="submitReview()" id="review-submit-btn">Envoyer mon avis</button>
+      </div>
     </div>
   </div>
 </div>
@@ -803,6 +846,7 @@ footer span{color:#888}
         <button class="admin-tab active" onclick="switchAdminTab('events',this)">📅 Événements</button>
         <button class="admin-tab" onclick="switchAdminTab('registrations',this)">👥 Inscriptions</button>
         <button class="admin-tab" onclick="switchAdminTab('archives',this)">🗄 Archives</button>
+        <button class="admin-tab" onclick="switchAdminTab('reviews',this)">⭐ Avis</button>
         <button class="admin-tab" onclick="switchAdminTab('settings',this)">⚙ Réglages</button>
       </div>
 
@@ -866,6 +910,15 @@ footer span{color:#888}
         <div class="admin-section-title">ARCHIVES DES ÉVÉNEMENTS PASSÉS</div>
         <div class="admin-section-sub">Chaque événement supprimé (manuellement ou automatiquement, 5 jours après sa date) conserve ici la liste de ses inscrits, téléchargeable en CSV.</div>
         <div class="admin-events-list" id="admin-archives-list">
+          <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+        </div>
+      </div>
+
+      <!-- ── Onglet Avis ── -->
+      <div class="admin-tab-content" id="tab-reviews">
+        <div class="admin-section-title">AVIS SUR LES ÉVÉNEMENTS</div>
+        <div class="admin-section-sub">Un avis déposé publiquement n'apparaît sur le site qu'une fois publié ici. Vous pouvez dépublier ou supprimer un avis à tout moment.</div>
+        <div class="admin-events-list" id="admin-reviews-list">
           <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
         </div>
       </div>
@@ -956,6 +1009,25 @@ footer span{color:#888}
       <div class="form-group">
         <label>Lieu <span class="req">*</span></label>
         <input type="text" id="ae-lieu" placeholder="Ex : Dojo du club, Bons-en-Chablais">
+      </div>
+      <div class="form-group" id="ae-series-toggle-group" style="margin-top:.75rem">
+        <div class="check-group">
+          <input type="checkbox" id="ae-series-enabled" onchange="toggleSeriesFields()">
+          <div class="check-text"><strong>Série récurrente</strong> — crée plusieurs occurrences du même événement (ex : cours hebdomadaire), à intervalle régulier à partir de la date de début ci-dessus.</div>
+        </div>
+      </div>
+      <div class="form-row" id="ae-series-fields" style="display:none">
+        <div class="form-group">
+          <label>Nombre d'occurrences <span class="req">*</span></label>
+          <input type="number" id="ae-series-occurrences" min="1" max="52" step="1" placeholder="10">
+        </div>
+        <div class="form-group">
+          <label>Intervalle entre occurrences (jours)</label>
+          <input type="number" id="ae-series-interval" min="1" step="1" placeholder="7">
+        </div>
+      </div>
+      <div class="ae-poster-hint" id="ae-series-hint" style="display:none;margin:-.5rem 0 .75rem">
+        Une série ne peut pas avoir d'affiche à la création — ajoutez-la occurrence par occurrence ensuite si besoin. Chaque occurrence est un événement indépendant : les modifier ou les supprimer une par une n'affecte pas les autres.
       </div>
       <div class="admin-form-section">Tarif & places</div>
       <div class="form-row">
@@ -1303,17 +1375,25 @@ function showReturnError(msg) {
 }
 
 /* ── Init ───────────────────────────────────────────── */
+// Charge/recharge la liste complète des événements (adminEvents + events) —
+// factorisé hors de initPage() pour être réutilisable après la création
+// d'une série (plusieurs événements créés d'un coup, plus simple de tout
+// recharger que de fusionner N nouveaux objets à la main dans adminEvents).
+async function reloadEventsData() {
+  const evts = await API.get('/api/events');
+  adminEvents = evts.map(normalizeEvent);
+  adminEvents.forEach(ev => {
+    events[ev.id] = {
+      id: ev.id, title: ev.title, sub: buildSubText(ev),
+      price: ev.price, isGrade: !!ev.isGrade
+    };
+  });
+  updateEventsJsonLd(adminEvents);
+}
+
 async function initPage() {
   try {
-    const evts = await API.get('/api/events');
-    adminEvents = evts.map(normalizeEvent);
-    adminEvents.forEach(ev => {
-      events[ev.id] = {
-        id: ev.id, title: ev.title, sub: buildSubText(ev),
-        price: ev.price, isGrade: !!ev.isGrade
-      };
-    });
-    updateEventsJsonLd(adminEvents);
+    await reloadEventsData();
     rebuildPublicPage();
   } catch(e) {
     console.error('Impossible de charger les événements:', e);
@@ -1321,6 +1401,9 @@ async function initPage() {
       `<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted)">Impossible de charger les événements. Vérifiez votre connexion.</div>`;
   }
   loadHeroCalendar();
+  // Chargée séparément (try/catch interne) : une erreur ici ne doit jamais
+  // empêcher le reste de la page (calendrier, inscriptions) de fonctionner.
+  loadPastEventsForReviews();
   // Gérer le retour HelloAsso APRÈS chargement des événements
   await handleCheckoutReturn();
 }
@@ -2075,6 +2158,7 @@ function switchAdminTab(tab, btn) {
   document.getElementById('tab-'+tab).classList.add('active');
   if (tab==='registrations') loadRegistrations();
   if (tab==='archives') loadArchives();
+  if (tab==='reviews') loadReviews();
 }
 
 /* ════════════════════════════════════════════════════
@@ -2332,6 +2416,84 @@ async function doDeleteArchive(id) {
   }
 }
 
+/* ── Onglet Avis (modération) ───────────────────────── */
+async function loadReviews() {
+  const list = document.getElementById('admin-reviews-list');
+  list.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>`;
+  try {
+    const reviews = await fetch(CONFIG.API_URL + '/api/reviews/admin', {
+      credentials: 'include',
+      headers: API._adminHeaders()
+    }).then(r => { if (!r.ok) throw new Error('Erreur ' + r.status); return r.json(); });
+    renderReviewsAdminList(reviews);
+  } catch (e) {
+    list.innerHTML = `<div style="padding:2rem;text-align:center;color:#C0392B;font-size:13px">Erreur de chargement : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderReviewsAdminList(reviews) {
+  const list = document.getElementById('admin-reviews-list');
+  if (!reviews.length) {
+    list.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Aucun avis pour le moment.</div>`;
+    return;
+  }
+  list.innerHTML = reviews.map(r => {
+    const dateStr = new Date(r.created_at).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+    const stars = '★'.repeat(r.note) + '☆'.repeat(5 - r.note);
+    return `<div class="admin-event-row">
+      <div class="admin-event-color" style="background:${r.publie ? '#2e7d32' : '#c9a227'}"></div>
+      <div class="admin-event-info">
+        <div class="admin-event-name">${escapeHtml(r.nom)} <span class="review-stars-static">${stars}</span> — <span style="font-weight:400;color:var(--muted)">${escapeHtml(r.event_title || 'Événement supprimé')}</span></div>
+        <div class="admin-event-meta">${r.commentaire ? escapeHtml(r.commentaire) : '(pas de commentaire)'}</div>
+        <div class="admin-event-meta">${r.email ? escapeHtml(r.email) + ' · ' : ''}déposé le ${dateStr} · ${r.publie ? 'publié' : 'en attente de validation'}</div>
+      </div>
+      <div class="admin-actions">
+        <button class="admin-btn-toggle" data-review-id="${r.id}" data-review-action="toggle" data-review-publie="${r.publie ? '1' : '0'}">${r.publie ? '🙈 Dépublier' : '✅ Publier'}</button>
+        <button class="admin-btn-del" data-review-id="${r.id}" data-review-action="delete" data-review-nom="${escapeHtml(r.nom)}">🗑 Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Délégation d'événement : nom/commentaire viennent du formulaire public
+// (texte libre non fiable), donc jamais interpolés dans un onclick inline
+// — même principe que la liste des archives ci-dessus.
+document.getElementById('admin-reviews-list')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-review-action]');
+  if (!btn) return;
+  const id = btn.dataset.reviewId;
+  if (btn.dataset.reviewAction === 'toggle') toggleReviewPublish(id, btn.dataset.reviewPublie === '1');
+  if (btn.dataset.reviewAction === 'delete') askDeleteReview(id, btn.dataset.reviewNom);
+});
+
+async function toggleReviewPublish(id, currentlyPublished) {
+  try {
+    await API.adminPut('/api/reviews/' + id + '/publish', { publie: !currentlyPublished });
+    await loadReviews();
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+function askDeleteReview(id, nom) {
+  pendingDeleteId = 'review_' + id;
+  document.getElementById('confirm-title').textContent = "SUPPRIMER CET AVIS ?";
+  document.getElementById('confirm-msg').textContent = `Supprimer définitivement l'avis de "${nom}" ? Cette action est irréversible.`;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-yes-btn').onclick = () => doDeleteReview(id);
+}
+
+async function doDeleteReview(id) {
+  try {
+    await API.adminDelete('/api/reviews/' + id);
+    closeConfirm();
+    await loadReviews();
+  } catch (e) {
+    alert('Erreur lors de la suppression : ' + e.message);
+    closeConfirm();
+  }
+}
+
 function exportCSV() {
   if (!currentRegs.length) { alert('Aucune inscription à exporter.'); return; }
 
@@ -2474,7 +2636,7 @@ function renderAdminList() {
         ? `<img class="admin-event-thumb" src="${CONFIG.API_URL}/cdn-cgi/image/fit=scale-down,format=auto,onerror=redirect,width=100${ev.posterUrl}" alt="">`
         : `<div class="admin-event-color" style="background:${typeColors[ev.type]||'#999'}"></div>`}
       <div class="admin-event-info">
-        <div class="admin-event-name">${escapeHtml(ev.title)}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}</div>
+        <div class="admin-event-name">${escapeHtml(ev.title)}${ev.featured?' ⭐':''}${ev.status==='ferme'?' 🔒':''}${ev.seriesId?' <span class="admin-series-badge" title="Fait partie d\'une série récurrente">🔁 série</span>':''}</div>
         <div class="admin-event-meta">${escapeHtml(typeLabels[ev.type]||ev.type)} · ${fmtDate(ev.dateStart,ev.dateEnd)} · ${escapeHtml(ev.lieu)}</div>
       </div>
       <div class="admin-event-badges"><span class="admin-spots-badge ${spotsClass}">${spotsTxt}</span></div>
@@ -2483,6 +2645,7 @@ function renderAdminList() {
         <button class="admin-btn-toggle" onclick="toggleInscriptions('${ev.id}','${ev.status}')" title="${ev.status==='ferme'?'Ouvrir les inscriptions':'Fermer les inscriptions'}">${ev.status==='ferme'?'🔓 Ouvrir':'🔒 Fermer'}</button>
         <button class="admin-btn-edit" onclick="openEventForm('${ev.id}')">✏ Modifier</button>
         <button class="admin-btn-del"  onclick="askDelete('${ev.id}')">🗑 Supprimer</button>
+        ${ev.seriesId?`<button class="admin-btn-del" onclick="askDeleteSeries('${ev.seriesId}')" title="Supprimer toutes les occurrences de cette série">🗑 Série entière</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -2534,6 +2697,14 @@ function openEventForm(id) {
   document.getElementById('ae-id').value=id||'';
   document.getElementById('ae-featured').checked=false;
   document.getElementById('ae-isGrade').checked=false;
+  document.getElementById('ae-series-enabled').checked=false;
+  document.getElementById('ae-series-occurrences').value='';
+  document.getElementById('ae-series-interval').value='';
+  toggleSeriesFields();
+  // Une série ne se crée qu'avec un nouvel événement — transformer un
+  // événement existant en série n'a pas de sens (il en faudrait un nouveau,
+  // avec ses propres inscriptions déjà en cours).
+  document.getElementById('ae-series-toggle-group').style.display = isNew ? '' : 'none';
   document.querySelectorAll('#ae-type-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('#ae-status-group .admin-toggle-btn').forEach(b=>b.classList.remove('active'));
   document.querySelector('#ae-status-group [data-val="disponible"]').classList.add('active');
@@ -2587,6 +2758,12 @@ function selectToggle(groupId, btn) {
   btn.classList.add('active');
 }
 
+function toggleSeriesFields() {
+  const on = document.getElementById('ae-series-enabled').checked;
+  document.getElementById('ae-series-fields').style.display = on ? 'flex' : 'none';
+  document.getElementById('ae-series-hint').style.display = on ? 'block' : 'none';
+}
+
 async function saveEvent() {
   const title    =document.getElementById('ae-title').value.trim();
   const sub      =document.getElementById('ae-sub').value.trim();
@@ -2617,6 +2794,15 @@ async function saveEvent() {
     helloasso:   parseFloat(priceVal) > 0, // activer automatiquement si payant
     helloasso_url: null,
   };
+
+  // ── Série récurrente : ne concerne que la création (pas l'édition d'un
+  // événement existant, cf. openEventForm qui masque déjà l'option dans ce
+  // cas) — chemin totalement séparé du reste de la fonction, qui gère la
+  // création d'un événement unique. ──────────────────────────────────────
+  if (!existingId && document.getElementById('ae-series-enabled').checked) {
+    return saveEventSeries(payload, dateStart);
+  }
+
   try {
     let saved;
     if (existingId) saved=await API.adminPut('/api/events/'+existingId,payload);
@@ -2649,6 +2835,37 @@ async function saveEvent() {
     rebuildPublicPage();
   } catch(e) {
     alert('Erreur lors de la sauvegarde : '+e.message);
+  }
+}
+
+// Crée une série d'événements récurrents (cf. POST /api/events/series côté
+// worker). `payload` est le même objet que saveEvent() construit pour un
+// événement unique — on en retire juste date_start (transmis à part, la
+// série calcule elle-même la date de chaque occurrence à partir de lui).
+async function saveEventSeries(payload, dateStart) {
+  const occVal = document.getElementById('ae-series-occurrences').value;
+  const occurrences = parseInt(occVal) || 0;
+  if (occurrences < 1 || occurrences > 52) {
+    alert("Le nombre d'occurrences doit être compris entre 1 et 52.");
+    return;
+  }
+  const intervalVal = document.getElementById('ae-series-interval').value;
+  const intervalDays = parseInt(intervalVal) || 7;
+  const { date_start, ...template } = payload;
+
+  try {
+    const result = await API.adminPost('/api/events/series', {
+      template, date_start: dateStart,
+      occurrences, interval_days: intervalDays,
+    });
+    await reloadEventsData();
+    populateRegsEventSelect();
+    closeEventForm();
+    renderAdminList();
+    rebuildPublicPage();
+    alert(`Série créée : ${result.created_event_ids.length} occurrence(s) ajoutée(s) au calendrier.`);
+  } catch(e) {
+    alert('Erreur lors de la création de la série : '+e.message);
   }
 }
 
@@ -2709,6 +2926,39 @@ async function doDelete() {
   }
 }
 
+// Supprime TOUTES les occurrences d'une série (cf. DELETE
+// /api/events/series/:seriesId côté worker) — état séparé de
+// pendingDeleteId/doDelete ci-dessus pour ne pas risquer d'interférer avec
+// la suppression d'un événement unique (même overlay de confirmation
+// réutilisé, mais gestionnaire dédié).
+let pendingDeleteSeriesId = null;
+
+function askDeleteSeries(seriesId) {
+  const count = adminEvents.filter(e=>e.seriesId===seriesId).length;
+  pendingDeleteSeriesId = seriesId;
+  document.getElementById('confirm-title').textContent='SUPPRIMER TOUTE LA SÉRIE ?';
+  document.getElementById('confirm-msg').textContent=`Voulez-vous vraiment supprimer les ${count} occurrence(s) de cette série ? Cette action est irréversible.`;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-yes-btn').onclick=()=>doDeleteSeries();
+}
+
+async function doDeleteSeries() {
+  if (!pendingDeleteSeriesId) return;
+  try {
+    await API.adminDelete('/api/events/series/'+pendingDeleteSeriesId);
+    adminEvents=adminEvents.filter(e=>e.seriesId!==pendingDeleteSeriesId);
+    Object.keys(events).forEach(id=>{ if (!adminEvents.find(e=>e.id===id)) delete events[id]; });
+    pendingDeleteSeriesId=null;
+    populateRegsEventSelect();
+    closeConfirm();
+    renderAdminList();
+    rebuildPublicPage();
+  } catch(e) {
+    alert('Erreur lors de la suppression de la série : '+e.message);
+    closeConfirm();
+  }
+}
+
 function closeConfirm() {
   document.getElementById('confirm-overlay').classList.remove('open');
 }
@@ -2736,6 +2986,148 @@ function rebuildPublicPage() {
   document.getElementById('events-grid').innerHTML=adminEvents.length
     ? adminEvents.map(ev=>buildCard(ev)).join('')
     : `<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted)"><div style="font-size:32px;margin-bottom:8px">📅</div>Aucun événement pour le moment.</div>`;
+}
+
+/* ── Avis publics sur les événements passés ─────────────────────────
+ * Deux sources fusionnées : les événements déjà chargés dans adminEvents
+ * mais dont la date est passée (encore présents jusqu'à leur purge, 5
+ * jours après leur fin, cf. purgeExpiredEvents côté worker), et les
+ * événements déjà archivés au-delà de ce délai (GET /api/archives/public,
+ * projection sans aucune donnée d'inscription/paiement). Un avis se
+ * soumet toujours avec l'event_id d'origine, qui reste valable dans les
+ * deux cas (cf. la validation POST /api/reviews côté worker, qui vérifie
+ * events PUIS event_archives). */
+let pastEventsForReview = [];
+let reviewSelectedRating = 0;
+
+async function loadPastEventsForReviews() {
+  const today = new Date().toISOString().slice(0, 10);
+  const recentPast = adminEvents
+    .filter(ev => (ev.dateEnd || ev.dateStart) && (ev.dateEnd || ev.dateStart) < today)
+    .map(ev => ({ event_id: ev.id, title: ev.title, date_start: ev.dateStart }));
+
+  let archived = [];
+  try {
+    archived = await API.get('/api/archives/public');
+  } catch (e) {
+    console.error('Impossible de charger les événements archivés :', e);
+  }
+
+  pastEventsForReview = [...recentPast, ...archived.map(a => ({ event_id: a.event_id, title: a.title, date_start: a.date_start }))]
+    .sort((a, b) => (b.date_start || '').localeCompare(a.date_start || ''));
+
+  const selectGroup = document.getElementById('review-select-group');
+  const select = document.getElementById('review-event-select');
+  if (!pastEventsForReview.length) {
+    selectGroup.style.display = 'none';
+    document.getElementById('review-empty').style.display = 'block';
+    return;
+  }
+  selectGroup.style.display = '';
+  document.getElementById('review-empty').style.display = 'none';
+  select.innerHTML = '<option value="">— Sélectionner —</option>' +
+    pastEventsForReview.map(ev =>
+      `<option value="${escapeHtml(ev.event_id)}">${escapeHtml(ev.title)} — ${fmtDate(ev.date_start)}</option>`
+    ).join('');
+}
+
+function renderStarPicker() {
+  document.getElementById('review-star-picker').innerHTML = [1, 2, 3, 4, 5].map(n =>
+    `<span class="review-star${n <= reviewSelectedRating ? ' filled' : ''}" onclick="setReviewRating(${n})">★</span>`
+  ).join('');
+}
+
+function setReviewRating(n) {
+  reviewSelectedRating = n;
+  renderStarPicker();
+}
+
+async function onReviewEventSelected() {
+  const eventId = document.getElementById('review-event-select').value;
+  const content = document.getElementById('review-content');
+  if (!eventId) { content.style.display = 'none'; return; }
+  content.style.display = 'block';
+  reviewSelectedRating = 0;
+  renderStarPicker();
+  document.getElementById('review-nom').value = '';
+  document.getElementById('review-email').value = '';
+  document.getElementById('review-commentaire').value = '';
+  const msgEl = document.getElementById('review-msg');
+  msgEl.style.display = 'none';
+  document.getElementById('review-summary').innerHTML = '<div style="color:var(--muted);font-size:14px">Chargement des avis…</div>';
+  document.getElementById('review-list').innerHTML = '';
+  try {
+    const reviews = await API.get('/api/reviews?event_id=' + encodeURIComponent(eventId));
+    renderReviewList(reviews);
+  } catch (e) {
+    document.getElementById('review-summary').innerHTML = '<div style="color:var(--muted);font-size:14px">Impossible de charger les avis pour le moment.</div>';
+  }
+}
+
+function renderReviewList(reviews) {
+  const summaryEl = document.getElementById('review-summary');
+  const listEl = document.getElementById('review-list');
+  if (!reviews.length) {
+    summaryEl.innerHTML = '<div style="color:var(--muted);font-size:14px">Aucun avis pour le moment — soyez le premier à en laisser un !</div>';
+    listEl.innerHTML = '';
+    return;
+  }
+  const avg = reviews.reduce((s, r) => s + r.note, 0) / reviews.length;
+  const rounded = Math.round(avg);
+  summaryEl.innerHTML = `<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <span style="font-size:28px;font-weight:800">${avg.toFixed(1)}</span>
+    <span class="review-stars-static" style="font-size:18px">${'★'.repeat(rounded)}${'☆'.repeat(5 - rounded)}</span>
+    <span style="color:var(--muted);font-size:13px">(${reviews.length} avis)</span>
+  </div>`;
+  listEl.innerHTML = reviews.map(r => `
+    <div style="padding:.9rem 0;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:.3rem">
+        <strong style="font-size:13.5px">${escapeHtml(r.nom)}</strong>
+        <span class="review-stars-static">${'★'.repeat(r.note)}${'☆'.repeat(5 - r.note)}</span>
+      </div>
+      ${r.commentaire ? `<div style="font-size:13.5px;color:var(--mid,#333);line-height:1.5">${escapeHtml(r.commentaire)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function submitReview() {
+  const eventId = document.getElementById('review-event-select').value;
+  const nom = document.getElementById('review-nom').value.trim();
+  const email = document.getElementById('review-email').value.trim();
+  const commentaire = document.getElementById('review-commentaire').value.trim();
+  const msgEl = document.getElementById('review-msg');
+
+  function showMsg(text, isError) {
+    msgEl.textContent = text;
+    msgEl.style.display = 'block';
+    msgEl.style.background = isError ? '#fdecea' : '#e8f5e9';
+    msgEl.style.color = isError ? '#c0392b' : '#2e7d32';
+  }
+
+  if (!eventId) { showMsg('Veuillez sélectionner un événement.', true); return; }
+  if (!reviewSelectedRating) { showMsg('Veuillez choisir une note.', true); return; }
+  if (!nom) { showMsg('Veuillez indiquer votre nom.', true); return; }
+
+  const btn = document.getElementById('review-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Envoi…';
+  try {
+    await API.post('/api/reviews', {
+      event_id: eventId, nom, email: email || null,
+      note: reviewSelectedRating, commentaire: commentaire || null,
+    });
+    showMsg('Merci ! Votre avis a bien été envoyé — il sera visible ici après validation par le club.', false);
+    document.getElementById('review-nom').value = '';
+    document.getElementById('review-email').value = '';
+    document.getElementById('review-commentaire').value = '';
+    reviewSelectedRating = 0;
+    renderStarPicker();
+  } catch (e) {
+    showMsg(e.message || "Une erreur est survenue, veuillez réessayer.", true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Envoyer mon avis';
+  }
 }
 
 function buildCard(ev) {
