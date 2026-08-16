@@ -34,4 +34,12 @@ describe('schema.sql — cohérence avec worker.js et les migrations', () => {
     expect(tableMatch).not.toBeNull();
     expect(tableMatch[1]).toContain('poster_key');
   });
+
+  it('déclare automation_status pour suivre les crons côté admin', () => {
+    const tableMatch = schema.match(/CREATE TABLE IF NOT EXISTS automation_status \(([\s\S]*?)\n\);/);
+    expect(tableMatch).not.toBeNull();
+    expect(tableMatch[1]).toContain('finished_at');
+    expect(tableMatch[1]).toContain('result_json');
+    expect(tableMatch[1]).toContain('error');
+  });
 });

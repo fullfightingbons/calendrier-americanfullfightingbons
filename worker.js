@@ -1179,7 +1179,7 @@ async function expireWaitlistNotifications(env) {
     SELECT DISTINCT event_id FROM waitlist
     WHERE statut = 'notifie' AND notify_expires_at < strftime('%Y-%m-%dT%H:%M:%SZ','now')
   `).all();
-  if (!results || results.length === 0) return;
+  if (!results || results.length === 0) return { events: 0 };
 
   await env.DB.prepare(`
     UPDATE waitlist SET statut = 'expiree', updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
@@ -1190,6 +1190,7 @@ async function expireWaitlistNotifications(env) {
     await notifyNextWaitlistEntry(env, event_id);
   }
   console.log(`[cron] expireWaitlistNotifications: ${results.length} événement(s) avec relance de la liste d'attente`);
+  return { events: results.length };
 }
 
 // ── Rappel J-1 ───────────────────────────────────────────────────
@@ -1230,7 +1231,7 @@ async function sendEventReminders(env) {
       AND r.paiement_status IN ('paye', 'gratuit')
       AND r.rappel_envoye_at IS NULL
   `).all();
-  if (!results || results.length === 0) return;
+  if (!results || results.length === 0) return { matched: 0, sent: 0 };
 
   let sent = 0;
   for (const reg of results) {
@@ -1245,6 +1246,7 @@ async function sendEventReminders(env) {
     }
   }
   console.log(`[cron] sendEventReminders: ${sent}/${results.length} rappel(s) envoyé(s)`);
+  return { matched: results.length, sent };
 }
 
 // ── Export ICS (RFC 5545) ────────────────────────────────────────
@@ -1420,7 +1422,7 @@ async function purgeExpiredEvents(env) {
 
   let archivedEvents = 0;
   let archivedRegistrations = 0;
-  for (const { id } of expired) {
+  for (const { id } of expired || []) {
     const result = await archiveAndDeleteEvent(env.DB, id);
     if (result) {
       archivedEvents += 1;
@@ -1428,6 +1430,7 @@ async function purgeExpiredEvents(env) {
     }
   }
   console.log(`[cron] purgeExpiredEvents: ${archivedEvents} événement(s) archivé(s) puis supprimé(s), ${archivedRegistrations} inscription(s) archivée(s)`);
+  return { expired: (expired || []).length, archived_events: archivedEvents, archived_registrations: archivedRegistrations };
 }
 
 // Une inscription "en_attente" liée à un checkout HelloAsso (helloasso_ref
@@ -1448,7 +1451,7 @@ async function purgeAbandonedCheckouts(env) {
       AND helloasso_ref IS NOT NULL
       AND created_at < datetime('now', '-2 hours')
   `).all();
-  if (!results || results.length === 0) return;
+  if (!results || results.length === 0) return { checked: 0, cancelled: 0, recovered: 0 };
 
   const eventIds = new Set();
   let cancelled = 0;
@@ -1486,15 +1489,122 @@ async function purgeAbandonedCheckouts(env) {
     await syncEventAvailability(env.DB, eventId);
   }
   console.log(`[cron] purgeAbandonedCheckouts: ${cancelled} annulée(s), ${recovered} rattrapée(s) comme payée(s) sur ${results.length} vérifiée(s)`);
+  return { checked: results.length, cancelled, recovered };
+}
+
+async function ensureAutomationStatusTable(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS automation_status (
+      key         TEXT PRIMARY KEY,
+      label       TEXT NOT NULL,
+      trigger     TEXT NOT NULL DEFAULT 'cron',
+      started_at  TEXT NOT NULL,
+      finished_at TEXT NOT NULL,
+      ok          INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT,
+      error       TEXT,
+      updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    )
+  `).run();
+}
+
+function compactAutomationResult(value) {
+  try {
+    const text = JSON.stringify(value ?? null);
+    return text.length <= 12000 ? text : JSON.stringify({ truncated: true, preview: text.slice(0, 12000) });
+  } catch {
+    return JSON.stringify(String(value));
+  }
+}
+
+async function saveAutomationStatus(env, entry) {
+  try {
+    await ensureAutomationStatusTable(env);
+    await env.DB.prepare(`
+      INSERT INTO automation_status (key, label, trigger, started_at, finished_at, ok, result_json, error, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+      ON CONFLICT(key) DO UPDATE SET
+        label = excluded.label,
+        trigger = excluded.trigger,
+        started_at = excluded.started_at,
+        finished_at = excluded.finished_at,
+        ok = excluded.ok,
+        result_json = excluded.result_json,
+        error = excluded.error,
+        updated_at = excluded.updated_at
+    `).bind(
+      entry.key,
+      entry.label,
+      entry.trigger,
+      entry.started_at,
+      entry.finished_at,
+      entry.ok ? 1 : 0,
+      entry.result_json || null,
+      entry.error || null,
+    ).run();
+  } catch (e) {
+    console.error('[automation:status]', e?.message || e);
+  }
+}
+
+async function runTrackedAutomation(env, key, label, task) {
+  const startedAt = new Date().toISOString();
+  try {
+    const result = await task();
+    await saveAutomationStatus(env, {
+      key,
+      label,
+      trigger: 'cron',
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      ok: true,
+      result_json: compactAutomationResult(result),
+    });
+    return result;
+  } catch (e) {
+    await saveAutomationStatus(env, {
+      key,
+      label,
+      trigger: 'cron',
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      ok: false,
+      error: String(e?.stack || e?.message || e).slice(0, 4000),
+    });
+    throw e;
+  }
+}
+
+async function readAutomationStatuses(env) {
+  await ensureAutomationStatusTable(env);
+  const { results } = await env.DB.prepare(`
+    SELECT key, label, trigger, started_at, finished_at, ok, result_json, error, updated_at
+    FROM automation_status
+    ORDER BY updated_at DESC
+  `).all();
+  return (results || []).map((row) => {
+    let result = null;
+    try { result = row.result_json ? JSON.parse(row.result_json) : null; } catch {}
+    return { ...row, ok: Number(row.ok) === 1, result };
+  });
 }
 
 export default {
   // ── Cron trigger quotidien (cf. [triggers] crons dans wrangler.toml) ──
   async scheduled(_event, env, _ctx) {
-    await purgeExpiredEvents(env);
-    await purgeAbandonedCheckouts(env);
-    await sendEventReminders(env);
-    await expireWaitlistNotifications(env);
+    const tasks = [
+      ['purge_expired_events', 'Archivage des événements expirés', () => purgeExpiredEvents(env)],
+      ['purge_abandoned_checkouts', 'Rattrapage des paiements HelloAsso abandonnés', () => purgeAbandonedCheckouts(env)],
+      ['send_event_reminders', 'Rappels J-1 aux inscrits', () => sendEventReminders(env)],
+      ['expire_waitlist_notifications', 'Relance des listes d’attente expirées', () => expireWaitlistNotifications(env)],
+    ];
+    for (const [key, label, task] of tasks) {
+      try {
+        await runTrackedAutomation(env, key, label, task);
+      } catch (e) {
+        console.error(`[cron] ${key} a échoué`, e?.message || e);
+      }
+    }
   },
 
   async fetch(request, env) {
@@ -1636,6 +1746,12 @@ export default {
     const subRes   = segments[2];
 
     try {
+      if (resource === 'admin' && resId === 'automation' && subRes === 'status') {
+        await requireAdmin();
+        if (method !== 'GET') return err('Méthode non autorisée', 405);
+        return json(await readAutomationStatuses(env));
+      }
+
       if (resource === 'auth') {
         if (method === 'POST' && resId === 'login') {
           // Rate limiting : le mot de passe admin (ADMIN_TOKEN) est un secret unique

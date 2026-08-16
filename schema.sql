@@ -152,6 +152,23 @@ CREATE TABLE IF NOT EXISTS admin_credentials (
 );
 
 -- ──────────────────────────────────────────────────────────────
+-- TABLE : automation_status
+-- Dernière exécution des tâches automatiques du calendrier
+-- (archivage, rattrapage paiements, rappels, liste d'attente).
+-- ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS automation_status (
+  key         TEXT PRIMARY KEY,
+  label       TEXT    NOT NULL,
+  trigger     TEXT    NOT NULL DEFAULT 'cron',
+  started_at  TEXT    NOT NULL,
+  finished_at TEXT    NOT NULL,
+  ok          INTEGER NOT NULL DEFAULT 0,
+  result_json TEXT,
+  error       TEXT,
+  updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+-- ──────────────────────────────────────────────────────────────
 -- Pas de données de démonstration ici.
 --
 -- ⚠️ Ce fichier est réexécuté par .github/workflows/deploy.yml À CHAQUE PUSH

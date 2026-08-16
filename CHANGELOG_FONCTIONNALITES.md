@@ -4,6 +4,16 @@ Ajoutées sur la base du projet existant, sans rien retirer. Tous les tests
 existants passent toujours (47/47 après ajout de tests pour le nouveau code),
 `tsc --noEmit` et `wrangler deploy --dry-run` sont propres.
 
+## Mise à jour 16/08/2026 — suivi des automatisations
+
+- Table `automation_status` (migration `0013_automation_status.sql`) pour
+  conserver la dernière exécution des tâches cron.
+- `GET /api/admin/automation/status` (admin) : expose le dernier statut, la
+  durée, le résultat compact et l'erreur éventuelle de chaque tâche.
+- Nouvel onglet admin "Automatisations" dans `index.html`.
+- Le cron quotidien continue les tâches suivantes même si une tâche échoue,
+  tout en enregistrant l'échec.
+
 ## 1. Liste d'attente
 
 - Table `waitlist` (migration `0007_waitlist.sql`).
@@ -87,7 +97,7 @@ Il reste, à la discrétion du club :
 ## Déploiement
 
 ```
-wrangler d1 migrations apply DB --remote   # applique 0007 à 0010
+wrangler d1 migrations apply DB --remote   # applique les migrations jusqu'à 0013
 wrangler deploy
 ```
 

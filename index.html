@@ -847,6 +847,7 @@ footer span{color:#888}
         <button class="admin-tab" onclick="switchAdminTab('registrations',this)">👥 Inscriptions</button>
         <button class="admin-tab" onclick="switchAdminTab('archives',this)">🗄 Archives</button>
         <button class="admin-tab" onclick="switchAdminTab('reviews',this)">⭐ Avis</button>
+        <button class="admin-tab" onclick="switchAdminTab('automations',this)">⏱ Automatisations</button>
         <button class="admin-tab" onclick="switchAdminTab('settings',this)">⚙ Réglages</button>
       </div>
 
@@ -919,6 +920,19 @@ footer span{color:#888}
         <div class="admin-section-title">AVIS SUR LES ÉVÉNEMENTS</div>
         <div class="admin-section-sub">Un avis déposé publiquement n'apparaît sur le site qu'une fois publié ici. Vous pouvez dépublier ou supprimer un avis à tout moment.</div>
         <div class="admin-events-list" id="admin-reviews-list">
+          <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+        </div>
+      </div>
+
+      <!-- ── Onglet Automatisations ── -->
+      <div class="admin-tab-content" id="tab-automations">
+        <div class="admin-section-title">AUTOMATISATIONS</div>
+        <div class="admin-section-sub">Suivez la dernière exécution des tâches planifiées : archivage, rattrapage HelloAsso, rappels J-1 et liste d'attente.</div>
+        <div class="admin-toolbar">
+          <div style="font-size:13px;color:var(--muted)">État persistant des crons Cloudflare.</div>
+          <button class="btn-export" onclick="loadAutomationStatus()">↻ Actualiser</button>
+        </div>
+        <div class="admin-events-list" id="admin-automations-list">
           <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
         </div>
       </div>
@@ -2159,6 +2173,65 @@ function switchAdminTab(tab, btn) {
   if (tab==='registrations') loadRegistrations();
   if (tab==='archives') loadArchives();
   if (tab==='reviews') loadReviews();
+  if (tab==='automations') loadAutomationStatus();
+}
+
+function formatAutomationDate(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return escapeHtml(String(value));
+  return d.toLocaleString('fr-FR');
+}
+
+function automationDuration(row) {
+  const start = new Date(row.started_at).getTime();
+  const end = new Date(row.finished_at).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+  const seconds = Math.round((end - start) / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}min ${seconds % 60}s`;
+}
+
+function automationSummary(row) {
+  if (row.error) return String(row.error).split('\n')[0].slice(0, 220);
+  const result = row.result;
+  if (!result || typeof result !== 'object') return 'Exécution terminée.';
+  return Object.entries(result)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' · ') || 'Exécution terminée.';
+}
+
+async function loadAutomationStatus() {
+  const list = document.getElementById('admin-automations-list');
+  list.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>`;
+  try {
+    const r = await fetch(CONFIG.API_URL + '/api/admin/automation/status', {
+      credentials: 'include',
+      headers: API._adminHeaders(),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    const rows = await r.json();
+    if (!rows.length) {
+      list.innerHTML = `<div class="admin-empty"><div class="admin-empty-icon">⏱</div><div style="font-weight:600;margin-bottom:6px">Aucune exécution enregistrée</div><div style="font-size:14px">Les statuts apparaîtront après le prochain cron.</div></div>`;
+      return;
+    }
+    list.innerHTML = rows.map(row => {
+      const ok = !!row.ok;
+      const badgeStyle = ok ? 'background:#EAF7EA;color:#1B5E20' : 'background:#FDEDEC;color:#8B0000';
+      const color = ok ? '#2e7d32' : '#C0392B';
+      const duration = automationDuration(row);
+      return `<div class="admin-event-row">
+        <div class="admin-event-color" style="background:${color}"></div>
+        <div class="admin-event-info">
+          <div class="admin-event-name">${escapeHtml(row.label || row.key)}</div>
+          <div class="admin-event-meta">Dernière fin : ${formatAutomationDate(row.finished_at)}${duration ? ' · durée ' + escapeHtml(duration) : ''} · ${escapeHtml(row.trigger || 'cron')}</div>
+          <div class="admin-event-meta">${escapeHtml(automationSummary(row))}</div>
+        </div>
+        <div class="admin-event-badges"><span class="admin-spots-badge" style="${badgeStyle}">${ok ? 'OK' : 'ÉCHEC'}</span></div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="padding:2rem;text-align:center;color:#8B0000;font-size:13px">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 /* ════════════════════════════════════════════════════
