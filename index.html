@@ -2802,7 +2802,7 @@ function openEventForm(id) {
     document.getElementById('ae-time-end').value   =ev.timeEnd||'';
     document.getElementById('ae-lieu').value       =ev.lieu||'';
     document.getElementById('ae-price').value      =ev.price;
-    document.getElementById('ae-spots').value      =ev.spots;
+    document.getElementById('ae-spots').value      =ev.spotsTotal;
     document.getElementById('ae-featured').checked =!!ev.featured;
     document.getElementById('ae-isGrade').checked  =!!ev.isGrade;
     const typeBtn=document.querySelector(`#ae-type-group [data-val="${ev.type}"]`);
