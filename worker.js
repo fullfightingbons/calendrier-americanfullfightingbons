@@ -199,7 +199,7 @@ function buildCorsHeaders(request, env, requestUrl) {
 const ADMIN_SESSION_COOKIE = 'affbc_calendar_session';
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const CLUB_SITE_ORIGIN = 'https://calendrier.americanfullfightingbons.fr';
-const CLUB_CONTACT_EMAIL = 'fullfightingbons@gmail.com';
+const CLUB_CONTACT_EMAIL = 'club@americanfullfightingbons.fr';
 const MAIL_SENDER_EMAIL = 'contact@americanfullfightingbons.fr';
 
 function parseCookies(request) {
